@@ -1,0 +1,64 @@
+<?php
+
+use App\Http\Controllers\Admin\ClientController as AdminClientController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Auth\AdminLoginController;
+use App\Http\Controllers\Auth\ClientLoginController;
+use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
+use App\Http\Controllers\Client\DeviceController;
+use App\Http\Controllers\Client\HistoryController;
+use App\Http\Controllers\Client\ProfileController;
+use App\Http\Controllers\Client\RouterController;
+use App\Http\Controllers\Client\UserController;
+use App\Http\Controllers\LocaleController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function () {
+    return redirect()->route('login');
+});
+
+Route::get('/locale/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
+
+// --- Client auth (default login) ---
+Route::get('/login', [ClientLoginController::class, 'create'])->name('login');
+Route::post('/login', [ClientLoginController::class, 'store'])->name('login.attempt');
+Route::post('/logout', [ClientLoginController::class, 'destroy'])->name('logout');
+
+// --- Admin auth ---
+Route::get('/admin/login', [AdminLoginController::class, 'create'])->name('admin.login');
+Route::post('/admin/login', [AdminLoginController::class, 'store'])->name('admin.login.attempt');
+Route::post('/admin/logout', [AdminLoginController::class, 'destroy'])->name('admin.logout');
+
+// --- Admin panel ---
+Route::middleware('auth:admin')->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
+    Route::resource('clients', AdminClientController::class)->except(['destroy']);
+    Route::post('/clients/{client}/users/{clientUser}/reset-password', [AdminClientController::class, 'resetUserPassword'])
+        ->name('clients.users.reset-password');
+});
+
+// --- Client panel ---
+Route::middleware('auth:client')->prefix('client')->name('client.')->group(function () {
+    Route::get('/dashboard', ClientDashboardController::class)->name('dashboard');
+
+    Route::resource('profiles', ProfileController::class)->except(['show']);
+
+    Route::resource('routers', RouterController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('/routers/{router}/connect', [RouterController::class, 'connect'])->name('routers.connect');
+
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::post('/users/batch', [UserController::class, 'storeBatch'])->name('users.batch');
+    Route::post('/users/bulk-delete', [UserController::class, 'bulkDestroy'])->name('users.bulk-destroy');
+    Route::get('/users/{hotspotUser}/edit', [UserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{hotspotUser}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('/users/{hotspotUser}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::get('/users/{hotspotUser}/sessions', [UserController::class, 'sessions'])->name('users.sessions');
+    Route::post('/users/{hotspotUser}/sessions/{radacctId}/kill', [UserController::class, 'killSession'])->name('users.sessions.kill');
+
+    Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+
+    Route::get('/history', [HistoryController::class, 'index'])->name('history.index');
+    Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');
+});
