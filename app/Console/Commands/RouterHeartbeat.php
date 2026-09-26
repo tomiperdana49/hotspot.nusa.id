@@ -10,7 +10,7 @@ class RouterHeartbeat extends Command
 {
     protected $signature = 'routers:heartbeat';
 
-    protected $description = 'Ping every verified router via API and update last_seen_at for reachable ones';
+    protected $description = 'Ping every verified router via API and update last_seen_at + identity for reachable ones';
 
     public function handle(MikrotikConnector $connector): int
     {
@@ -19,8 +19,11 @@ class RouterHeartbeat extends Command
         $reachable = 0;
 
         foreach ($routers as $router) {
-            if ($connector->ping($router)) {
+            $identity = $connector->ping($router);
+
+            if ($identity !== null) {
                 $router->update(['last_seen_at' => now()]);
+                $connector->syncIdentity($router, $identity);
                 $reachable++;
             }
         }

@@ -22,17 +22,91 @@ use Throwable;
 class MikrotikConnector
 {
     /**
+     * Name of the hotspot server profile and user profile provision()
+     * creates on every router — also the default MikroTik Group for new
+     * voucher profiles, so their Mikrotik-Group reply matches it.
+     */
+    public const RADIUS_NUSA_PROFILE = 'radius-nusa';
+
+    /**
+     * "radius-nusa" hotspot server profile. login-by leaves out "cookie"
+     * so a device can't skip RADIUS by replaying an old login cookie.
+     */
+    public const RADIUS_NUSA_SERVER_PROFILE = [
+        'login-by' => 'http-chap',
+        'use-radius' => 'yes',
+        'radius-accounting' => 'yes',
+        'radius-interim-update' => '00:02:00',
+        'radius-mac-format' => 'XX:XX:XX:XX:XX:XX',
+        'nas-port-type' => 'wireless-802.11',
+    ];
+
+    /**
+     * "radius-nusa" hotspot user profile. Timeouts, shared users and rate
+     * limit are left blank (see RADIUS_NUSA_USER_PROFILE_UNSET) — session
+     * limits come from RADIUS per voucher profile instead.
+     */
+    public const RADIUS_NUSA_USER_PROFILE = [
+        'address-pool' => 'none',
+        'status-autorefresh' => '1m',
+        'shared-users' => 'unlimited',
+        'add-mac-cookie' => 'no',
+        'open-status-page' => 'always',
+        'transparent-proxy' => 'no',
+    ];
+
+    /**
+     * Fields cleared on the "radius-nusa" user profile so they show blank
+     * in WinBox. Setting e.g. idle-timeout=none is not the same thing.
+     * (shared-users is the exception: unset means 1, blank is "unlimited".)
+     */
+    public const RADIUS_NUSA_USER_PROFILE_UNSET = [
+        'session-timeout', 'idle-timeout', 'keepalive-timeout', 'rate-limit',
+    ];
+
+    /**
      * Builds the ip-binding comment / simple queue name this class uses
-     * to tag entries it manages: "{username}-{expires_at date}" (or
+     * to tag entries it manages: "{username}-{expires_at Y-m-d H:i}" (or
      * "-no-expiry" for a voucher with no set expiry), so an admin can
      * read who a binding belongs to and when it expires straight from
      * WinBox instead of an opaque internal tag.
      */
     private function bindingTag(HotspotUser $user): string
     {
-        $expiry = $user->expires_at?->format('Y-m-d') ?? 'no-expiry';
+        $expiry = $user->expires_at?->format('Y-m-d H:i') ?? 'no-expiry';
 
         return "{$user->username}-{$expiry}";
+    }
+
+    /**
+     * Simple queue name for one bound device: bindingTag() plus the
+     * device's MAC, e.g. "nusa-2026-10-15 14:17 12:EC:FB:3F:CB:A1". One queue
+     * per device (queue names must be unique), so every device of a
+     * voucher keeps its own rate limit.
+     */
+    private function queueName(HotspotUser $user, string $mac): string
+    {
+        return $this->bindingTag($user).' '.DeviceName::normalizeMac($mac);
+    }
+
+    /**
+     * Parses a queue name this class generated: [username, MAC], with a
+     * null MAC for the older one-queue-per-user names (plain bindingTag()).
+     * Returns null for queues an admin created by hand.
+     *
+     * @return array{0: string, 1: ?string}|null
+     */
+    private function parseQueueName(string $name): ?array
+    {
+        $mac = null;
+
+        if (preg_match('/^(.+) ([0-9A-F]{2}(?::[0-9A-F]{2}){5})$/', $name, $matches)) {
+            [$name, $mac] = [$matches[1], $matches[2]];
+        }
+
+        $username = $this->usernameFromTag($name);
+
+        return $username === null ? null : [$username, $mac];
     }
 
     /**
@@ -43,7 +117,7 @@ class MikrotikConnector
      */
     private function usernameFromTag(string $tag): ?string
     {
-        if (preg_match('/^(.+)-(\d{4}-\d{2}-\d{2}|no-expiry)$/', $tag, $matches)) {
+        if (preg_match('/^(.+)-(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?|no-expiry)$/', $tag, $matches)) {
             return $matches[1];
         }
 
@@ -64,6 +138,8 @@ class MikrotikConnector
             'radius' => false,
             'radius_incoming' => false,
             'hotspot_profile' => false,
+            'server_profile_radius_nusa' => false,
+            'user_profile_radius_nusa' => false,
         ];
 
         try {
@@ -93,6 +169,15 @@ class MikrotikConnector
 
             $client->query((new Query('/radius/incoming/set'))->equal('accept', 'yes')->equal('port', '3799'))->read();
             $steps['radius_incoming'] = true;
+
+            // Dedicated RADIUS-enabled server profile + matching user
+            // profile, so the admin can point a hotspot server at
+            // "radius-nusa" without hand-editing the default ones.
+            $this->ensureProfile($client, '/ip/hotspot/profile', self::RADIUS_NUSA_PROFILE, self::RADIUS_NUSA_SERVER_PROFILE);
+            $steps['server_profile_radius_nusa'] = true;
+
+            $this->ensureProfile($client, '/ip/hotspot/user/profile', self::RADIUS_NUSA_PROFILE, self::RADIUS_NUSA_USER_PROFILE, self::RADIUS_NUSA_USER_PROFILE_UNSET);
+            $steps['user_profile_radius_nusa'] = true;
 
             // Only touch the profile(s) actually attached to a real hotspot
             // server — updating the first profile returned by the API can
@@ -178,13 +263,14 @@ class MikrotikConnector
 
     /**
      * Lightweight reachability check used by the heartbeat scheduler —
-     * connects and runs a trivial read-only query, without touching the
-     * router's configuration.
+     * connects and reads the System Identity, without touching the
+     * router's configuration. Returns the identity name when reachable
+     * (empty string if the router reports none), or null when it isn't.
      */
-    public function ping(Router $router): bool
+    public function ping(Router $router, int $timeout = 5): ?string
     {
         if (blank($router->api_host)) {
-            return false;
+            return null;
         }
 
         try {
@@ -193,15 +279,35 @@ class MikrotikConnector
                 'user' => $router->api_user,
                 'pass' => $router->api_pass,
                 'port' => (int) $router->api_port,
-                'timeout' => 5,
+                'timeout' => $timeout,
             ]);
 
-            $client->query(new Query('/system/identity/print'))->read();
+            $identity = $client->query(new Query('/system/identity/print'))->read();
 
-            return true;
+            return trim($identity[0]['name'] ?? '');
         } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Keep the stored router name (and its NAS description) in step with
+     * the router's System Identity, so renaming it in WinBox shows up here
+     * without a manual "Konfigurasi Ulang". Returns true if it changed.
+     */
+    public function syncIdentity(Router $router, ?string $identity): bool
+    {
+        if (blank($identity) || $identity === $router->name) {
             return false;
         }
+
+        $router->update(['name' => $identity]);
+
+        if ($router->nas_ip) {
+            Nas::where('nasname', $router->nas_ip)->update(['description' => $identity]);
+        }
+
+        return true;
     }
 
     /**
@@ -394,28 +500,45 @@ class MikrotikConnector
 
             $active = $client->query(new Query('/ip/hotspot/active/print'))->read();
 
-            if (empty($active)) {
+            $boundByMac = [];
+            $boundCount = [];
+            foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
+                $mac = strtoupper($binding['mac-address'] ?? '');
+                $bindingUser = $this->usernameFromTag($binding['comment'] ?? '');
+                if ($mac && $bindingUser !== null) {
+                    $boundByMac[$mac] = $binding;
+                    $boundCount[$bindingUser] = ($boundCount[$bindingUser] ?? 0) + 1;
+                }
+            }
+
+            $queueByMac = [];
+            $legacyQueues = [];
+            $queues = $client->query(new Query('/queue/simple/print'))->read();
+            $topQueueId = $queues[0]['.id'] ?? null;
+            foreach ($queues as $queue) {
+                $parsed = $this->parseQueueName($queue['name'] ?? '');
+                if ($parsed === null) {
+                    continue;
+                }
+
+                if ($parsed[1] !== null) {
+                    $queueByMac[$parsed[1]] = $queue;
+                } else {
+                    $legacyQueues[] = $queue + ['username' => $parsed[0]];
+                }
+            }
+
+            $usernames = array_unique(array_merge(
+                array_filter(array_column($active, 'user')),
+                array_keys($boundCount),
+            ));
+
+            if (empty($usernames)) {
                 return ['ok' => true, 'message' => 'Tidak ada sesi aktif.'];
             }
 
-            $boundByMac = [];
-            foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
-                $mac = strtoupper($binding['mac-address'] ?? '');
-                if ($mac && $this->usernameFromTag($binding['comment'] ?? '') !== null) {
-                    $boundByMac[$mac] = $binding;
-                }
-            }
-
-            $queueByUsername = [];
-            foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
-                $username = $this->usernameFromTag($queue['name'] ?? '');
-                if ($username !== null) {
-                    $queueByUsername[$username] = $queue;
-                }
-            }
-
-            $usernames = array_unique(array_filter(array_column($active, 'user')));
             $users = HotspotUser::whereIn('username', $usernames)->with('profile')->get()->keyBy('username');
+            $handledMacs = [];
 
             foreach ($active as $session) {
                 $username = $session['user'] ?? null;
@@ -434,8 +557,26 @@ class MikrotikConnector
 
                 $tag = $this->bindingTag($user);
                 $existingBinding = $boundByMac[$mac] ?? null;
+                $handledMacs[$mac] = true;
 
                 if (! $existingBinding) {
+                    // A bypassed device has no open RADIUS session, so
+                    // RADIUS Simultaneous-Use can't see it — enforce the
+                    // profile's Shared limit here instead, counting bound
+                    // devices. Over the limit: drop this login rather
+                    // than bind it.
+                    $limit = (int) ($user->profile?->simultaneous_use ?? 0);
+                    if ($limit > 0 && ($boundCount[$username] ?? 0) >= $limit) {
+                        if (isset($session['.id'])) {
+                            $client->query((new Query('/ip/hotspot/active/remove'))->equal('.id', $session['.id']))->read();
+                        }
+
+                        continue;
+                    }
+
+                    $boundCount[$username] = ($boundCount[$username] ?? 0) + 1;
+                    Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
+
                     $client->query(
                         (new Query('/ip/hotspot/ip-binding/add'))
                             ->equal('mac-address', $mac)
@@ -460,29 +601,87 @@ class MikrotikConnector
 
                 $target = "{$ip}/32";
                 $maxLimit = "{$profile->rate_up}/{$profile->rate_down}";
-                $existingQueue = $queueByUsername[$username] ?? null;
+                $queueName = $this->queueName($user, $mac);
+                $existingQueue = $queueByMac[$mac] ?? null;
+
+                // Adopt an old one-queue-per-user entry already pointing at
+                // this device's IP (renamed below) instead of adding a
+                // second queue on the same target.
+                if (! $existingQueue) {
+                    foreach ($legacyQueues as $i => $legacy) {
+                        if ($legacy['username'] === $username && ($legacy['target'] ?? null) === $target) {
+                            $existingQueue = $legacy;
+                            unset($legacyQueues[$i]);
+                            break;
+                        }
+                    }
+                }
 
                 if (! $existingQueue) {
-                    $client->query(
-                        (new Query('/queue/simple/add'))
-                            ->equal('name', $tag)
-                            ->equal('target', $target)
-                            ->equal('max-limit', $maxLimit)
-                    )->read();
+                    // Simple queues match first-to-last: add on top so the
+                    // hotspot's own catch-all queue can't shadow this one.
+                    $add = (new Query('/queue/simple/add'))
+                        ->equal('name', $queueName)
+                        ->equal('target', $target)
+                        ->equal('max-limit', $maxLimit);
+
+                    if ($topQueueId) {
+                        $add->equal('place-before', $topQueueId);
+                    }
+
+                    $client->query($add)->read();
                 } elseif (
-                    ($existingQueue['name'] ?? null) !== $tag
+                    ($existingQueue['name'] ?? null) !== $queueName
                     || ($existingQueue['target'] ?? null) !== $target
                     || ($existingQueue['max-limit'] ?? null) !== $maxLimit
                 ) {
                     $client->query(
                         (new Query('/queue/simple/set'))
                             ->equal('.id', $existingQueue['.id'])
-                            ->equal('name', $tag)
+                            ->equal('name', $queueName)
                             ->equal('target', $target)
                             ->equal('max-limit', $maxLimit)
                     )->read();
                 }
             }
+
+            // Bypassed devices never show up in /ip/hotspot/active, so the
+            // loop above can't reach them: keep their binding comment and
+            // queue name current here (voucher renewals, tag format changes).
+            foreach ($boundByMac as $mac => $binding) {
+                if (isset($handledMacs[$mac])) {
+                    continue;
+                }
+
+                $user = $users->get($this->usernameFromTag($binding['comment'] ?? ''));
+
+                if (! $user) {
+                    continue;
+                }
+
+                $tag = $this->bindingTag($user);
+
+                if (($binding['comment'] ?? null) !== $tag) {
+                    $client->query(
+                        (new Query('/ip/hotspot/ip-binding/set'))
+                            ->equal('.id', $binding['.id'])
+                            ->equal('comment', $tag)
+                    )->read();
+                }
+
+                $queue = $queueByMac[$mac] ?? null;
+                $queueName = $this->queueName($user, $mac);
+
+                if ($queue && ($queue['name'] ?? null) !== $queueName) {
+                    $client->query(
+                        (new Query('/queue/simple/set'))
+                            ->equal('.id', $queue['.id'])
+                            ->equal('name', $queueName)
+                    )->read();
+                }
+            }
+
+            $this->keepQueuesOnTop($client);
 
             return ['ok' => true, 'message' => 'Sinkronisasi binding selesai.'];
         } catch (BadCredentialsException) {
@@ -494,6 +693,189 @@ class MikrotikConnector
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
         }
+    }
+
+    /**
+     * Move every per-device queue this class manages above the first queue
+     * it doesn't — typically the hotspot's dynamic "hs-<server>" queue on
+     * the whole bridge, which would otherwise catch the device's traffic
+     * first (simple queues match top-down) and skip its rate limit. That
+     * dynamic queue can be re-created on top (e.g. after a reboot), hence
+     * re-checked on every sync.
+     */
+    private function keepQueuesOnTop(Client $client): void
+    {
+        $firstForeignId = null;
+
+        foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
+            $ours = ($this->parseQueueName($queue['name'] ?? '')[1] ?? null) !== null;
+
+            if (! $ours) {
+                $firstForeignId ??= $queue['.id'] ?? null;
+            } elseif ($firstForeignId && isset($queue['.id'])) {
+                $client->query(
+                    (new Query('/queue/simple/move'))
+                        ->equal('numbers', $queue['.id'])
+                        ->equal('destination', $firstForeignId)
+                )->read();
+            }
+        }
+    }
+
+    /**
+     * Devices currently riding a bypass ip-binding this class created —
+     * read from the hotspot host table, which carries the binding's
+     * comment. A host idle longer than $maxIdle seconds counts as gone,
+     * since the hotspot server may be set to never expire hosts. Cached
+     * briefly; an unreachable router just yields none.
+     *
+     * @return array<int, array{username: string, mac: string, ip: string, uptime: int, bytes: int}>
+     */
+    public function bypassedHosts(Router $router, int $maxIdle = 300): array
+    {
+        if (blank($router->api_host)) {
+            return [];
+        }
+
+        return Cache::remember("mikrotik:bypassed-hosts:{$router->id}", 20, function () use ($router, $maxIdle) {
+            try {
+                $client = new Client([
+                    'host' => $router->api_host,
+                    'user' => $router->api_user,
+                    'pass' => $router->api_pass,
+                    'port' => (int) $router->api_port,
+                    'timeout' => 4,
+                ]);
+
+                $hosts = $client->query(new Query('/ip/hotspot/host/print'))->read();
+            } catch (Throwable) {
+                return [];
+            }
+
+            $devices = [];
+            foreach ($hosts as $host) {
+                $username = $this->usernameFromTag($host['comment'] ?? '');
+
+                if (
+                    ($host['bypassed'] ?? '') !== 'true'
+                    || $username === null
+                    || $this->durationSeconds($host['idle-time'] ?? '') > $maxIdle
+                ) {
+                    continue;
+                }
+
+                $devices[] = [
+                    'username' => $username,
+                    'mac' => DeviceName::normalizeMac($host['mac-address'] ?? ''),
+                    'ip' => $host['address'] ?? '',
+                    'uptime' => $this->durationSeconds($host['uptime'] ?? ''),
+                    'bytes' => (int) ($host['bytes-in'] ?? 0) + (int) ($host['bytes-out'] ?? 0),
+                ];
+            }
+
+            return $devices;
+        });
+    }
+
+    /**
+     * Take a bypassed device offline: remove this class's ip-binding for
+     * that MAC (only if it belongs to $username), the simple queue pinned
+     * to its IP — left behind, it would throttle whichever device DHCP
+     * hands that IP to next — and its hotspot host entry, so the device
+     * lands back on the login page. If the user has other bound devices,
+     * syncActiveBindings() recreates a queue for them on its next run.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function disconnectBypassedHost(Router $router, string $username, string $mac): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        $mac = DeviceName::normalizeMac($mac);
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+            ]);
+
+            $removed = false;
+            $targets = [];
+            foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
+                if (
+                    DeviceName::normalizeMac($binding['mac-address'] ?? '') === $mac
+                    && $this->usernameFromTag($binding['comment'] ?? '') === $username
+                    && isset($binding['.id'])
+                ) {
+                    $client->query((new Query('/ip/hotspot/ip-binding/remove'))->equal('.id', $binding['.id']))->read();
+                    $removed = true;
+
+                    if (! empty($binding['to-address'])) {
+                        $targets[] = "{$binding['to-address']}/32";
+                    }
+                }
+            }
+
+            if (! $removed) {
+                return ['ok' => false, 'message' => 'Perangkat tidak ditemukan di router, mungkin sudah terputus.'];
+            }
+
+            foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
+                $parsed = $this->parseQueueName($queue['name'] ?? '');
+
+                if (
+                    $parsed !== null
+                    && $parsed[0] === $username
+                    && ($parsed[1] === $mac || ($parsed[1] === null && in_array($queue['target'] ?? '', $targets, true)))
+                    && isset($queue['.id'])
+                ) {
+                    $client->query((new Query('/queue/simple/remove'))->equal('.id', $queue['.id']))->read();
+                }
+            }
+
+            foreach ($client->query(new Query('/ip/hotspot/host/print'))->read() as $host) {
+                if (DeviceName::normalizeMac($host['mac-address'] ?? '') === $mac && isset($host['.id'])) {
+                    $client->query((new Query('/ip/hotspot/host/remove'))->equal('.id', $host['.id']))->read();
+                }
+            }
+
+            Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
+
+            return ['ok' => true, 'message' => 'Perangkat berhasil diputus.'];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * RouterOS duration ("1w2d3h4m5s", "39m21s", or "01:02:03") to seconds.
+     */
+    private function durationSeconds(string $value): int
+    {
+        if (preg_match('/^(\d+):(\d+):(\d+)$/', $value, $m)) {
+            return (int) $m[1] * 3600 + (int) $m[2] * 60 + (int) $m[3];
+        }
+
+        $units = ['w' => 604800, 'd' => 86400, 'h' => 3600, 'm' => 60, 's' => 1, 'ms' => 0];
+        preg_match_all('/(\d+)(ms|w|d|h|m|s)/', $value, $matches, PREG_SET_ORDER);
+
+        $seconds = 0;
+        foreach ($matches as [, $amount, $unit]) {
+            $seconds += (int) $amount * $units[$unit];
+        }
+
+        return $seconds;
     }
 
     /**
@@ -545,7 +927,7 @@ class MikrotikConnector
             }
 
             foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
-                $username = $this->usernameFromTag($queue['name'] ?? '');
+                $username = $this->parseQueueName($queue['name'] ?? '')[0] ?? null;
                 if ($username !== null && isset($usernameSet[$username]) && isset($queue['.id'])) {
                     $client->query((new Query('/queue/simple/remove'))->equal('.id', $queue['.id']))->read();
                 }
@@ -607,6 +989,43 @@ class MikrotikConnector
 
             return $names;
         });
+    }
+
+    /**
+     * Add the named profile under $menu, or update it in place if it
+     * already exists — safe to call on every re-provision. $unset fields
+     * are cleared back to blank afterwards.
+     *
+     * @param  array<string, string>  $attributes
+     * @param  array<int, string>  $unset
+     */
+    private function ensureProfile(Client $client, string $menu, string $name, array $attributes = [], array $unset = []): void
+    {
+        $existing = $client->query((new Query("{$menu}/print"))->where('name', $name))->read();
+        $id = $existing[0]['.id'] ?? null;
+
+        if (! $id || ! empty($attributes)) {
+            $query = $id
+                ? (new Query("{$menu}/set"))->equal('.id', $id)
+                : (new Query("{$menu}/add"))->equal('name', $name);
+
+            foreach ($attributes as $key => $value) {
+                $query->equal($key, $value);
+            }
+
+            $result = $client->query($query)->read();
+            $id ??= $result['after']['ret'] ?? null;
+        }
+
+        if (! $id) {
+            return;
+        }
+
+        foreach ($unset as $field) {
+            $client->query(
+                (new Query("{$menu}/unset"))->equal('numbers', $id)->equal('value-name', $field)
+            )->read();
+        }
     }
 
     private function fail(array $steps, string $message): array

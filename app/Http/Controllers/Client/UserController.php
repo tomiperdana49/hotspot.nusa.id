@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Models\DeviceName;
 use App\Models\HotspotUser;
 use App\Models\Profile;
 use App\Models\Radcheck;
@@ -11,6 +12,7 @@ use App\Models\Router;
 use App\Models\UserBatch;
 use App\Services\DeviceNameResolver;
 use App\Services\MikrotikConnector;
+use App\Services\OnlineDevices;
 use App\Services\UserGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +29,7 @@ class UserController extends Controller
         private readonly UserGenerator $generator,
         private readonly MikrotikConnector $mikrotik,
         private readonly DeviceNameResolver $deviceNames,
+        private readonly OnlineDevices $onlineDevices,
     ) {}
 
     public function index(Request $request)
@@ -39,12 +42,9 @@ class UserController extends Controller
             ->latest()
             ->get();
 
-        $onlineCounts = DB::table('radacct')
-            ->whereIn('username', $users->pluck('username'))
-            ->whereNull('acctstoptime')
-            ->groupBy('username')
-            ->selectRaw('username, count(*) as total')
-            ->pluck('total', 'username');
+        $onlineCounts = $this->onlineDevices
+            ->forUsers($users->keyBy('username'), Router::where('client_id', $clientId)->get())
+            ->countBy('username');
 
         return view('client.users.index', compact('users', 'onlineCounts'));
     }
@@ -199,35 +199,16 @@ class UserController extends Controller
     {
         $this->authorizeUser($hotspotUser);
 
-        $limiter = trim(($hotspotUser->profile->rate_up ?? '-').' / '.($hotspotUser->profile->rate_down ?? '-'));
-        $expiresAt = $hotspotUser->expires_at?->format('d M Y H:i') ?? '-';
-
-        $rows = DB::table('radacct')
-            ->where('username', $hotspotUser->username)
-            ->whereNull('acctstoptime')
-            ->orderByDesc('acctstarttime')
-            ->get();
-
-        $deviceNames = $this->deviceNames->forSessions(
-            $rows,
-            Router::where('client_id', $hotspotUser->client_id)->get()->keyBy('nas_ip'),
+        $sessions = $this->onlineDevices->forUsers(
+            collect([$hotspotUser->username => $hotspotUser->load('profile')]),
+            Router::where('client_id', $hotspotUser->client_id)->get(),
         );
 
-        $sessions = $rows
-            ->map(fn ($row) => [
-                'id' => $row->radacctid,
-                'username' => $row->username,
-                'device_name' => $deviceNames[$row->radacctid] ?? '-',
-                'ip_address' => $row->framedipaddress ?: '-',
-                'mac_address' => $row->callingstationid ?: '-',
-                'limiter' => $limiter,
-                'start_time' => Carbon::parse($row->acctstarttime)->format('d M Y H:i'),
-                'expires_at' => $expiresAt,
-                'uptime' => $this->formatDuration((int) Carbon::parse($row->acctstarttime)->diffInSeconds(now())),
-                'volume' => $this->formatBytes((int) $row->acctinputoctets + (int) $row->acctoutputoctets),
-            ]);
-
-        return response()->json(['sessions' => $sessions]);
+        return response()->json([
+            'username' => $hotspotUser->username,
+            'expires_at' => $hotspotUser->expires_at?->format('d M Y H:i') ?? '-',
+            'sessions' => $sessions,
+        ]);
     }
 
     public function killSession(HotspotUser $hotspotUser, int $radacctId): JsonResponse
@@ -259,26 +240,17 @@ class UserController extends Controller
         return response()->json($result, $result['ok'] ? 200 : 502);
     }
 
-    private function formatDuration(int $seconds): string
+    public function killBypass(Request $request, HotspotUser $hotspotUser, Router $router): JsonResponse
     {
-        $seconds = max(0, $seconds);
-        $h = intdiv($seconds, 3600);
-        $m = intdiv($seconds % 3600, 60);
+        $this->authorizeUser($hotspotUser);
+        abort_if($router->client_id !== $hotspotUser->client_id, Response::HTTP_FORBIDDEN);
 
-        return $h > 0 ? "{$h}j {$m}m" : "{$m}m";
-    }
+        $mac = DeviceName::normalizeMac($request->input('mac'));
+        abort_unless(preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/', $mac), Response::HTTP_UNPROCESSABLE_ENTITY);
 
-    private function formatBytes(int $bytes): string
-    {
-        if ($bytes <= 0) {
-            return '0 MB';
-        }
+        $result = $this->mikrotik->disconnectBypassedHost($router, $hotspotUser->username, $mac);
 
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $i = (int) floor(log($bytes, 1024));
-        $i = min($i, count($units) - 1);
-
-        return round($bytes / (1024 ** $i), 2).' '.$units[$i];
+        return response()->json($result, $result['ok'] ? 200 : 502);
     }
 
     private function purgeRadiusUsers(array $usernames, int $clientId): void

@@ -126,7 +126,7 @@ return [
         'simultaneous_use_label' => 'Simultaneous Use',
         'mikrotik_group_label' => 'MikroTik Group',
         'mikrotik_group_hint' => 'Harus sama persis dengan nama profile di router:',
-        'mikrotik_group_hint2' => 'Biarkan "default" kalau belum buat profile khusus.',
+        'mikrotik_group_hint2' => 'Biarkan ":profile" — profile ini dibuat otomatis saat router ditambahkan.',
     ],
 
     'user_index' => [

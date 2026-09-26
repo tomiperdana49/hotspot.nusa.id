@@ -126,7 +126,7 @@ return [
         'simultaneous_use_label' => 'Simultaneous Use',
         'mikrotik_group_label' => 'MikroTik Group',
         'mikrotik_group_hint' => 'Must match the profile name on the router exactly:',
-        'mikrotik_group_hint2' => 'Leave it as "default" if you haven\'t created a custom profile.',
+        'mikrotik_group_hint2' => 'Leave it as ":profile" — this profile is created automatically when the router is added.',
     ],
 
     'user_index' => [

@@ -42,6 +42,11 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
 <style>
     .dataTables_wrapper { font-size: 0.875rem; }
+    .dataTables_wrapper .dt-top, .dataTables_wrapper .dt-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+    .dataTables_wrapper .dt-top { margin-bottom: 1rem; }
+    .dataTables_wrapper .dt-top > *, .dataTables_wrapper .dt-bottom > * { float: none !important; margin: 0 !important; padding: 0 !important; }
+    .dataTables_wrapper .dt-bottom { padding: 1rem 0; }
+    .dataTables_wrapper .dt-scroll { overflow-x: auto; margin: 0 -1.25rem; padding: 0 1.25rem; }
     .dataTables_wrapper .dataTables_filter { float: right; margin-bottom: 1rem; }
     .dataTables_wrapper .dataTables_filter input {
         border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 0.5rem 0.75rem 0.5rem 2.25rem;
@@ -77,3 +82,8 @@
 </style>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script>
+    $.extend(true, $.fn.dataTable.defaults, {
+        dom: '<"dt-top"lf><"dt-scroll"t><"dt-bottom"ip>',
+    });
+</script>

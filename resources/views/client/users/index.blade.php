@@ -57,40 +57,41 @@
 
     <div class="card overflow-hidden">
         <div class="overflow-x-auto px-5 pt-5">
-            <table id="usersTable" class="w-full text-sm">
+            <table id="usersTable" class="w-full text-sm whitespace-nowrap">
                 <thead>
                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <th class="px-5 py-3 w-8"><input type="checkbox" id="checkAll" title="{{ __('app.ui.users.select_all') }}" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500"></th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_username') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_password') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_profile') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_speed') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_shared') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_status') }}</th>
-                        <th class="px-5 py-3" title="{{ __('app.ui.users.online_title') }}">{{ __('app.user_index.col_online') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_expiry') }}</th>
-                        <th class="px-5 py-3"></th>
+                        <th class="!pl-4 !pr-2 py-3 w-8"><input type="checkbox" id="checkAll" title="{{ __('app.ui.users.select_all') }}" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500"></th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_username') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_password') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_profile') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_status') }}</th>
+                        <th class="px-4 py-3" title="{{ __('app.ui.users.online_title') }}">{{ __('app.user_index.col_online') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_expiry') }}</th>
+                        <th class="px-4 py-3"><span class="sr-only">{{ __('app.user_index.modal_action') }}</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($users as $user)
                         <tr class="hover:bg-gray-50">
-                            <td class="px-5 py-3.5"><input type="checkbox" class="row-check rounded border-gray-300 text-brand-600 focus:ring-brand-500" value="{{ $user->id }}"></td>
-                            <td class="px-5 py-3.5">
+                            <td class="!pl-4 !pr-2 py-3.5"><input type="checkbox" class="row-check rounded border-gray-300 text-brand-600 focus:ring-brand-500" value="{{ $user->id }}"></td>
+                            <td class="px-4 py-3.5">
                                 <div class="font-mono font-medium">{{ $user->username }}</div>
                                 @if ($user->note)
-                                    <div class="text-xs text-gray-400 truncate max-w-[14rem]">{{ $user->note }}</div>
+                                    <div class="text-xs text-gray-400 truncate max-w-[11rem]" title="{{ $user->note }}">{{ $user->note }}</div>
                                 @endif
                             </td>
-                            <td class="px-5 py-3.5 font-mono text-gray-500">{{ $user->password }}</td>
-                            <td class="px-5 py-3.5">{{ $user->profile->name ?? '-' }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $user->profile->rate_up ?? '-' }} / {{ $user->profile->rate_down ?? '-' }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $user->profile->simultaneous_use ?? '-' }}</td>
-                            <td class="px-5 py-3.5">
+                            <td class="px-4 py-3.5 font-mono text-gray-500">{{ $user->password }}</td>
+                            <td class="px-4 py-3.5">
+                                <div>{{ $user->profile->name ?? '-' }}</div>
+                                @if ($user->profile)
+                                    <div class="text-xs text-gray-400">{{ $user->profile->rate_up ?? '-' }} / {{ $user->profile->rate_down ?? '-' }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3.5">
                                 @php $meta = $statusMeta[$user->status] ?? $statusMeta['expired']; @endphp
                                 <span class="badge {{ $meta['badge'] }}" title="{{ __('app.ui.user_status.'.$user->status.'_desc') }}"><span class="dot {{ $meta['dot'] }}"></span>{{ __('app.ui.user_status.'.$user->status) }}</span>
                             </td>
-                            <td class="px-5 py-3.5">
+                            <td class="px-4 py-3.5">
                                 @php $onlineCount = $onlineCounts[$user->username] ?? 0; @endphp
                                 <button
                                     type="button"
@@ -99,18 +100,23 @@
                                     data-user-id="{{ $user->id }}"
                                 ><span class="dot {{ $onlineCount > 0 ? 'bg-green-500' : 'bg-gray-300' }}"></span>{{ $onlineCount }}/{{ $user->profile->simultaneous_use ?? '-' }}</button>
                             </td>
-                            <td class="px-5 py-3.5 text-gray-500">{{ $user->expires_at?->format('d M Y H:i') ?? '-' }}</td>
-                            <td class="px-5 py-3.5 text-right">
-                                <div class="flex items-center justify-end gap-2 whitespace-nowrap">
-                                    <a href="{{ route('client.users.edit', $user) }}" class="btn-sm-edit">
-                                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linejoin="round"/><path d="M12 20h9" stroke-linecap="round"/></svg>
-                                        {{ __('app.user_index.edit') }}
+                            <td class="px-4 py-3.5 text-gray-600" data-order="{{ $user->expires_at?->timestamp ?? 0 }}">
+                                @if ($user->expires_at)
+                                    <div>{{ $user->expires_at->format('d M Y') }}</div>
+                                    <div class="text-xs text-gray-400">{{ $user->expires_at->format('H:i') }}</div>
+                                @else
+                                    -
+                                @endif
+                            </td>
+                            <td class="px-4 py-3.5 text-right">
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <a href="{{ route('client.users.edit', $user) }}" class="btn-sm-edit !p-2" title="{{ __('app.user_index.edit') }}" aria-label="{{ __('app.user_index.edit') }} {{ $user->username }}">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linejoin="round"/><path d="M12 20h9" stroke-linecap="round"/></svg>
                                     </a>
                                     <form method="POST" action="{{ route('client.users.destroy', $user) }}" onsubmit="return confirm('{{ __('app.user_index.confirm_delete', ['username' => $user->username]) }}')">
                                         @csrf @method('DELETE')
-                                        <button class="btn-sm-danger">
-                                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18" stroke-linecap="round"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                            {{ __('app.user_index.delete') }}
+                                        <button class="btn-sm-danger !p-2" title="{{ __('app.user_index.delete') }}" aria-label="{{ __('app.user_index.delete') }} {{ $user->username }}">
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18" stroke-linecap="round"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </button>
                                     </form>
                                 </div>
@@ -130,25 +136,25 @@
     <div id="sessionModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-gray-900/50 p-4">
         <div class="bg-white rounded-2xl shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden flex flex-col">
             <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
-                <h3 class="font-semibold">{{ __('app.user_index.active_sessions') }}</h3>
+                <div>
+                    <h3 class="font-semibold">{{ __('app.user_index.active_sessions') }} <span id="sessionModalUser" class="font-mono text-gray-500"></span></h3>
+                    <p id="sessionModalMeta" class="text-xs text-gray-500 mt-0.5 hidden">{{ __('app.user_index.modal_expires') }}: <span id="sessionModalExpires" class="font-medium text-gray-700"></span></p>
+                </div>
                 <button type="button" id="sessionModalClose" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="{{ __('app.ui.close') }}">
                     <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>
                 </button>
             </div>
             <div class="overflow-auto">
-                <table class="w-full text-sm">
+                <table class="w-full text-sm whitespace-nowrap">
                     <thead>
                         <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            <th class="px-4 py-2.5">{{ __('app.user_index.col_username') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.ui.devices.device_name') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.user_index.modal_ip') }}</th>
-                            <th class="px-4 py-2.5">{{ __('app.user_index.modal_mac') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.user_index.modal_limiter') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.user_index.modal_start') }}</th>
-                            <th class="px-4 py-2.5">{{ __('app.user_index.modal_expires') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.user_index.modal_uptime') }}</th>
                             <th class="px-4 py-2.5">{{ __('app.user_index.modal_volume') }}</th>
-                            <th class="px-4 py-2.5">{{ __('app.user_index.modal_action') }}</th>
+                            <th class="px-4 py-2.5 text-right">{{ __('app.user_index.modal_action') }}</th>
                         </tr>
                     </thead>
                     <tbody id="sessionModalBody" class="divide-y divide-gray-100"></tbody>
@@ -187,7 +193,7 @@
                     paginate: { previous: '{{ __('app.datatable.paginate_previous') }}', next: '{{ __('app.datatable.paginate_next') }}' },
                 },
                 columnDefs: [
-                    { orderable: false, searchable: false, targets: [0, 7, -1] },
+                    { orderable: false, searchable: false, targets: [0, 5, -1] },
                 ],
             });
 
@@ -262,7 +268,7 @@
 
             function openModal(userId) {
                 currentUserId = userId;
-                body.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-gray-400">${escapeHtml(i18n.loading)}</td></tr>`;
+                body.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">${escapeHtml(i18n.loading)}</td></tr>`;
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 loadSessions(userId);
@@ -278,29 +284,32 @@
                 fetch(`/client/users/${userId}/sessions`, { headers: { Accept: 'application/json' } })
                     .then((r) => r.json())
                     .then((data) => {
+                        document.getElementById('sessionModalUser').textContent = data.username ? `— ${data.username}` : '';
+                        document.getElementById('sessionModalExpires').textContent = data.expires_at || '-';
+                        document.getElementById('sessionModalMeta').classList.toggle('hidden', !data.username);
                         if (!data.sessions || !data.sessions.length) {
-                            body.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-gray-400">${escapeHtml(i18n.noActiveSessions)}</td></tr>`;
+                            body.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">${escapeHtml(i18n.noActiveSessions)}</td></tr>`;
                             return;
                         }
                         body.innerHTML = data.sessions.map((s) => `
-                            <tr>
-                                <td class="px-4 py-2.5 font-mono">${escapeHtml(s.username)}</td>
-                                <td class="px-4 py-2.5 font-medium">${escapeHtml(s.device_name)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.ip_address)}</td>
-                                <td class="px-4 py-2.5 font-mono text-xs">${escapeHtml(s.mac_address)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.limiter)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.start_time)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.expires_at)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.uptime)}</td>
-                                <td class="px-4 py-2.5">${escapeHtml(s.volume)}</td>
-                                <td class="px-4 py-2.5">
-                                    <button type="button" class="kill-btn btn-sm-danger" data-id="${s.id}">${escapeHtml(i18n.killSession)}</button>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium">${escapeHtml(s.device_name)}</div>
+                                    <div class="font-mono text-xs text-gray-400">${escapeHtml(s.mac_address)}</div>
+                                </td>
+                                <td class="px-4 py-3 font-mono text-gray-600">${escapeHtml(s.ip_address)}</td>
+                                <td class="px-4 py-3 text-gray-600">${escapeHtml(s.limiter)}</td>
+                                <td class="px-4 py-3 text-gray-600">${escapeHtml(s.start_time)}</td>
+                                <td class="px-4 py-3 text-gray-600">${escapeHtml(s.uptime)}</td>
+                                <td class="px-4 py-3 text-gray-600">${escapeHtml(s.volume)}</td>
+                                <td class="px-4 py-3 text-right">
+                                    ${s.kill_url ? `<button type="button" class="kill-btn btn-sm-danger" data-url="${escapeHtml(s.kill_url)}" data-mac="${escapeHtml(s.kill_mac)}">${escapeHtml(i18n.killSession)}</button>` : ''}
                                 </td>
                             </tr>
                         `).join('');
                     })
                     .catch(() => {
-                        body.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-red-500">${escapeHtml(i18n.loadSessionsError)}</td></tr>`;
+                        body.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-red-500">${escapeHtml(i18n.loadSessionsError)}</td></tr>`;
                     });
             }
 
@@ -325,12 +334,14 @@
                 btn.disabled = true;
                 btn.textContent = i18n.disconnecting;
 
-                fetch(`/client/users/${currentUserId}/sessions/${btn.dataset.id}/kill`, {
+                fetch(btn.dataset.url, {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         Accept: 'application/json',
+                        'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({ mac: btn.dataset.mac || null }),
                 })
                     .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
                     .then(({ ok, data }) => {

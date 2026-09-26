@@ -88,8 +88,8 @@
             </div>
             <div>
                 <label class="label">{{ __('app.profile_form.mikrotik_group_label') }}</label>
-                <input name="mikrotik_group" value="{{ old('mikrotik_group', $p?->mikrotik_group ?? 'default') }}" required class="input font-mono">
-                <p class="hint">{{ __('app.profile_form.mikrotik_group_hint') }} <code class="bg-gray-100 px-1 rounded">IP → Hotspot → User Profiles</code>. {{ __('app.profile_form.mikrotik_group_hint2') }}</p>
+                <input name="mikrotik_group" value="{{ old('mikrotik_group', $p?->mikrotik_group ?? \App\Services\MikrotikConnector::RADIUS_NUSA_PROFILE) }}" required class="input font-mono">
+                <p class="hint">{{ __('app.profile_form.mikrotik_group_hint') }} <code class="bg-gray-100 px-1 rounded">IP → Hotspot → User Profiles</code>. {{ __('app.profile_form.mikrotik_group_hint2', ['profile' => \App\Services\MikrotikConnector::RADIUS_NUSA_PROFILE]) }}</p>
             </div>
             <div>
                 <label class="label">{{ __('app.profile_form.session_timeout_label') }}</label>

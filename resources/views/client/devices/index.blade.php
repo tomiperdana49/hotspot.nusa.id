@@ -54,12 +54,12 @@
                             <td class="px-5 py-3.5 text-gray-600">{{ $device['volume'] }}</td>
                             <td class="px-5 py-3.5 text-gray-500">{{ $device['expires_at'] }}</td>
                             <td class="px-5 py-3.5 text-right">
-                                @if ($device['hotspot_user_id'])
+                                @if ($device['kill_url'])
                                     <button
                                         type="button"
                                         class="kill-btn btn-sm-danger"
-                                        data-user-id="{{ $device['hotspot_user_id'] }}"
-                                        data-radacct-id="{{ $device['radacct_id'] }}"
+                                        data-url="{{ $device['kill_url'] }}"
+                                        data-mac="{{ $device['kill_mac'] }}"
                                     >
                                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 5.64a9 9 0 11-12.73 0M12 3v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         {{ __('app.device_index.disconnect') }}
@@ -109,12 +109,14 @@
                 const original = btn.innerHTML;
                 btn.textContent = i18n.disconnecting;
 
-                fetch(`/client/users/${btn.dataset.userId}/sessions/${btn.dataset.radacctId}/kill`, {
+                fetch(btn.dataset.url, {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         Accept: 'application/json',
+                        'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({ mac: btn.dataset.mac || null }),
                 })
                     .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
                     .then(({ ok, data }) => {

@@ -56,6 +56,7 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
     Route::delete('/users/{hotspotUser}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::get('/users/{hotspotUser}/sessions', [UserController::class, 'sessions'])->name('users.sessions');
     Route::post('/users/{hotspotUser}/sessions/{radacctId}/kill', [UserController::class, 'killSession'])->name('users.sessions.kill');
+    Route::post('/users/{hotspotUser}/bypass/{router}/kill', [UserController::class, 'killBypass'])->name('users.bypass.kill');
 
     Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
 

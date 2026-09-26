@@ -62,6 +62,16 @@ class RouterController extends Controller
     {
         $this->authorizeRouter($router);
 
+        // Pick up a System Identity renamed on the router since the last
+        // heartbeat. Short timeout so an offline router doesn't stall the page.
+        if ($router->status === 'verified') {
+            $identity = $this->connector->ping($router, 3);
+            if ($identity !== null) {
+                $router->update(['last_seen_at' => now()]);
+                $this->connector->syncIdentity($router, $identity);
+            }
+        }
+
         $serverIp = $this->serverIp();
         $viaWireguard = $router->api_host && str_starts_with((string) $router->api_host, '10.88.');
 
