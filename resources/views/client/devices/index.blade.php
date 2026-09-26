@@ -24,45 +24,58 @@
 
     <div class="card overflow-hidden">
         <div class="overflow-x-auto px-5 pt-5">
-            <table id="devicesTable" class="w-full text-sm">
+            <table id="devicesTable" class="w-full text-sm whitespace-nowrap">
                 <thead>
                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <th class="px-5 py-3">{{ __('app.user_index.col_username') }}</th>
-                        <th class="px-5 py-3">{{ __('app.ui.devices.device_name') }}</th>
-                        <th class="px-5 py-3">{{ __('app.nav.router') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.modal_ip') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.modal_mac') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.modal_limiter') }}</th>
-                        <th class="px-5 py-3">{{ __('app.device_index.col_start') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.modal_uptime') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.modal_volume') }}</th>
-                        <th class="px-5 py-3">{{ __('app.user_index.col_expiry') }}</th>
-                        <th class="px-5 py-3"></th>
+                        <th class="px-4 py-3">{{ __('app.ui.devices.device_name') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_username') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.modal_ip') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.modal_limiter') }}</th>
+                        <th class="px-4 py-3">{{ __('app.device_index.col_start') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.modal_uptime') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.modal_volume') }}</th>
+                        <th class="px-4 py-3">{{ __('app.user_index.col_expiry') }}</th>
+                        <th class="px-4 py-3"><span class="sr-only">{{ __('app.user_index.modal_action') }}</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($devices as $device)
                         <tr class="hover:bg-gray-50">
-                            <td class="px-5 py-3.5 font-mono font-medium">{{ $device['username'] }}</td>
-                            <td class="px-5 py-3.5 font-medium text-gray-800">{{ $device['device_name'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $device['router_name'] }}</td>
-                            <td class="px-5 py-3.5 font-mono text-xs text-gray-500">{{ $device['ip_address'] }}</td>
-                            <td class="px-5 py-3.5 font-mono text-xs text-gray-500">{{ $device['mac_address'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $device['limiter'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-500">{{ $device['start_time'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $device['uptime'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-600">{{ $device['volume'] }}</td>
-                            <td class="px-5 py-3.5 text-gray-500">{{ $device['expires_at'] }}</td>
-                            <td class="px-5 py-3.5 text-right">
+                            <td class="px-4 py-3.5">
+                                <div class="font-medium text-gray-800">{{ $device['device_name'] }}</div>
+                                <div class="font-mono text-xs text-gray-400">{{ $device['mac_address'] }}</div>
+                            </td>
+                            <td class="px-4 py-3.5">
+                                <div class="font-mono font-medium">{{ $device['username'] }}</div>
+                                <div class="text-xs text-gray-400">{{ $device['router_name'] }}</div>
+                            </td>
+                            <td class="px-4 py-3.5 font-mono text-xs text-gray-500">{{ $device['ip_address'] }}</td>
+                            <td class="px-4 py-3.5 text-gray-600">{{ $device['limiter'] }}</td>
+                            <td class="px-4 py-3.5 text-gray-600" data-order="{{ $device['started_at'] }}">
+                                <div>{{ \Illuminate\Support\Str::beforeLast($device['start_time'], ' ') }}</div>
+                                <div class="text-xs text-gray-400">{{ \Illuminate\Support\Str::afterLast($device['start_time'], ' ') }}</div>
+                            </td>
+                            <td class="px-4 py-3.5 text-gray-600">{{ $device['uptime'] }}</td>
+                            <td class="px-4 py-3.5 text-gray-600">{{ $device['volume'] }}</td>
+                            <td class="px-4 py-3.5 text-gray-600">
+                                @if ($device['expires_at'] !== '-')
+                                    <div>{{ \Illuminate\Support\Str::beforeLast($device['expires_at'], ' ') }}</div>
+                                    <div class="text-xs text-gray-400">{{ \Illuminate\Support\Str::afterLast($device['expires_at'], ' ') }}</div>
+                                @else
+                                    -
+                                @endif
+                            </td>
+                            <td class="px-4 py-3.5 text-right">
                                 @if ($device['kill_url'])
                                     <button
                                         type="button"
-                                        class="kill-btn btn-sm-danger"
+                                        class="kill-btn btn-sm-danger !p-2"
+                                        title="{{ __('app.device_index.disconnect') }}"
+                                        aria-label="{{ __('app.device_index.disconnect') }} {{ $device['device_name'] }}"
                                         data-url="{{ $device['kill_url'] }}"
                                         data-mac="{{ $device['kill_mac'] }}"
                                     >
-                                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 5.64a9 9 0 11-12.73 0M12 3v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        {{ __('app.device_index.disconnect') }}
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 5.64a9 9 0 11-12.73 0M12 3v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                     </button>
                                 @endif
                             </td>
