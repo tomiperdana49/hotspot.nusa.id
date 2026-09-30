@@ -41,20 +41,20 @@
                 <form method="POST" action="{{ route('client.users.store') }}" class="p-6 space-y-4">
                     @csrf
                     <div>
-                        <label class="label">{{ __('app.user_index.col_username') }}</label>
-                        <input name="username" value="{{ old('username') }}" required maxlength="64" pattern="\S+" autocomplete="off" class="input font-mono">
-                    </div>
-                    <div>
-                        <label class="label">{{ __('app.user_index.col_password') }}</label>
-                        <input name="password" value="{{ old('password') }}" required maxlength="64" autocomplete="off" class="input font-mono">
-                    </div>
-                    <div>
                         <label class="label">{{ __('app.user_index.col_profile') }}</label>
                         <select name="profile_id" required class="select">
                             @foreach ($profiles as $profile)
                                 <option value="{{ $profile->id }}">{{ $profile->name }}@if ($profile->rate_down) — {{ $profile->rate_up ?? '-' }}/{{ $profile->rate_down }}@endif</option>
                             @endforeach
                         </select>
+                    </div>
+                    <div>
+                        <label class="label">{{ __('app.user_index.col_username') }}</label>
+                        <input name="username" value="{{ old('username') }}" required maxlength="64" pattern="\S+" autocomplete="off" class="input font-mono">
+                    </div>
+                    <div>
+                        <label class="label">{{ __('app.user_index.col_password') }}</label>
+                        <input name="password" value="{{ old('password') }}" required maxlength="64" autocomplete="off" class="input font-mono">
                     </div>
                     <div>
                         <label class="label">{{ __('app.user_create.note_label') }}</label>
