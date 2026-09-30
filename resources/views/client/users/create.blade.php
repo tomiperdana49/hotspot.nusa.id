@@ -41,6 +41,14 @@
                 <form method="POST" action="{{ route('client.users.store') }}" class="p-6 space-y-4">
                     @csrf
                     <div>
+                        <label class="label">{{ __('app.user_index.col_username') }}</label>
+                        <input name="username" value="{{ old('username') }}" required maxlength="64" pattern="\S+" autocomplete="off" class="input font-mono">
+                    </div>
+                    <div>
+                        <label class="label">{{ __('app.user_index.col_password') }}</label>
+                        <input name="password" value="{{ old('password') }}" required maxlength="64" autocomplete="off" class="input font-mono">
+                    </div>
+                    <div>
                         <label class="label">{{ __('app.user_index.col_profile') }}</label>
                         <select name="profile_id" required class="select">
                             @foreach ($profiles as $profile)
@@ -50,7 +58,7 @@
                     </div>
                     <div>
                         <label class="label">{{ __('app.user_create.note_label') }}</label>
-                        <input name="note" class="input" maxlength="190">
+                        <input name="note" value="{{ old('note') }}" class="input" maxlength="190">
                     </div>
                     <button type="submit" class="btn-primary w-full">{{ __('app.user_create.generate_one') }}</button>
                 </form>

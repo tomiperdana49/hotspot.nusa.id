@@ -361,7 +361,7 @@ return [
         ],
         'user_create' => [
             'subtitle' => 'Choose how to create users: one at a time, or many at once to print as vouchers.',
-            'single_desc' => 'Good for giving access to one customer. Username & password are generated automatically.',
+            'single_desc' => 'Good for giving access to one customer. Enter the username & password yourself.',
             'batch_desc' => 'Good for creating many vouchers at once, e.g. to sell or print.',
             'qty_hint' => 'Max 1000',
             'code_length_hint' => '4–20 characters',

@@ -361,7 +361,7 @@ return [
         ],
         'user_create' => [
             'subtitle' => 'Pilih cara membuat user: satu per satu, atau banyak sekaligus untuk dicetak sebagai voucher.',
-            'single_desc' => 'Cocok untuk memberi akses ke satu pelanggan. Username & password dibuat otomatis.',
+            'single_desc' => 'Cocok untuk memberi akses ke satu pelanggan. Isi username & password sendiri.',
             'batch_desc' => 'Cocok untuk membuat banyak voucher sekaligus, misalnya untuk dijual/dicetak.',
             'qty_hint' => 'Maksimal 1000',
             'code_length_hint' => '4–20 karakter',

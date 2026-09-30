@@ -62,6 +62,12 @@ class UserController extends Controller
         $client = Auth::guard('client')->user()->client;
 
         $data = $request->validate([
+            'username' => [
+                'required', 'string', 'max:64', 'regex:/^\S+$/',
+                Rule::unique('hotspot_users', 'username'),
+                Rule::unique('radcheck', 'username'),
+            ],
+            'password' => ['required', 'string', 'max:64'],
             'profile_id' => ['required', 'exists:profiles,id'],
             'note' => ['nullable', 'string', 'max:190'],
         ]);
@@ -69,7 +75,12 @@ class UserController extends Controller
         $profile = Profile::where('client_id', $client->id)->findOrFail($data['profile_id']);
         $this->guardUserQuota($client, 1);
 
-        $user = $this->generator->generateOne($profile, note: $data['note'] ?? null);
+        $user = $this->generator->generateOne(
+            $profile,
+            username: $data['username'],
+            password: $data['password'],
+            note: $data['note'] ?? null,
+        );
 
         return redirect()->route('client.users.index')
             ->with('status', "User dibuat: {$user->username} / {$user->password}");
