@@ -18,6 +18,8 @@
     @layer components {
         .input, .select { @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none disabled:bg-gray-50 disabled:text-gray-500; }
         .label { @apply block text-sm font-medium text-gray-700 mb-1.5; }
+        /* Mark labels whose field is required with a red asterisk. */
+        .label:has(+ :is(input, select, textarea)[required])::after { content: ' *'; @apply text-red-600; }
         .hint { @apply text-xs text-gray-500 mt-1.5 leading-relaxed; }
         .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed; }
         .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm; }

@@ -13,6 +13,8 @@
         @layer components {
             .input { @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none; }
             .label { @apply block text-sm font-medium text-gray-700 mb-1.5; }
+            /* Mark labels whose field is required with a red asterisk. */
+            .label:has(+ :is(input, select, textarea)[required])::after { content: ' *'; @apply text-red-600; }
         }
     </style>
 </head>
