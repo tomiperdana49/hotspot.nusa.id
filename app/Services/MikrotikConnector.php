@@ -8,6 +8,7 @@ use App\Models\HotspotUser;
 use App\Models\Nas;
 use App\Models\Profile;
 use App\Models\Router;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use RouterOS\Client;
 use RouterOS\Exceptions\BadCredentialsException;
@@ -64,6 +65,8 @@ class MikrotikConnector
         'session-timeout', 'idle-timeout', 'keepalive-timeout', 'rate-limit',
     ];
 
+    private const SHARED_QUEUE_SUFFIX = ' shared';
+
     /**
      * Builds the ip-binding comment / simple queue name this class uses
      * to tag entries it manages: "{username}-{expires_at Y-m-d H:i}" (or
@@ -87,6 +90,54 @@ class MikrotikConnector
     private function queueName(HotspotUser $user, string $mac): string
     {
         return $this->bindingTag($user).' '.DeviceName::normalizeMac($mac);
+    }
+
+    /**
+     * Parent queue name for a voucher on a "shared" bandwidth profile:
+     * bindingTag() plus " shared", e.g. "nusa-2026-10-15 14:17 shared".
+     */
+    private function sharedQueueName(HotspotUser $user): string
+    {
+        return $this->bindingTag($user).self::SHARED_QUEUE_SUFFIX;
+    }
+
+    /**
+     * Reverses sharedQueueName(): the username, or null if $name isn't a
+     * parent queue this class created.
+     */
+    private function usernameFromSharedQueueName(string $name): ?string
+    {
+        if (! str_ends_with($name, self::SHARED_QUEUE_SUFFIX)) {
+            return null;
+        }
+
+        return $this->usernameFromTag(substr($name, 0, -strlen(self::SHARED_QUEUE_SUFFIX)));
+    }
+
+    /**
+     * RouterOS rate ("5M", "512k", "5000000") to bits per second.
+     */
+    private function rateBps(string $rate): int
+    {
+        if (! preg_match('/^\s*(\d+(?:\.\d+)?)\s*([kmg]?)/i', $rate, $m)) {
+            return 0;
+        }
+
+        $multiplier = ['' => 1, 'k' => 1000, 'm' => 1000000, 'g' => 1000000000][strtolower($m[2])];
+
+        return (int) round((float) $m[1] * $multiplier);
+    }
+
+    /**
+     * Whether two "upload/download" rate pairs are equal, ignoring the
+     * format — RouterOS prints "5M/5M" back as "5000000/5000000".
+     */
+    private function sameRates(string $a, string $b): bool
+    {
+        $a = array_map(fn ($rate) => $this->rateBps($rate), explode('/', $a));
+        $b = array_map(fn ($rate) => $this->rateBps($rate), explode('/', $b));
+
+        return $a === $b;
     }
 
     /**
@@ -681,6 +732,7 @@ class MikrotikConnector
                 }
             }
 
+            $this->syncSharedQueues($client, $users);
             $this->keepQueuesOnTop($client);
 
             return ['ok' => true, 'message' => 'Sinkronisasi binding selesai.'];
@@ -692,6 +744,125 @@ class MikrotikConnector
             return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Bandwidth mode "shared": hang every device queue of a voucher under
+     * one parent queue capped at the profile's rate, so its devices share
+     * that rate instead of each getting it in full. Each device is
+     * guaranteed an equal slice (limit-at = rate / Shared) and may borrow
+     * up to the full rate while the others are idle. Vouchers on a
+     * per-device profile get their device queues detached again and any
+     * leftover parent removed.
+     *
+     * @param  Collection<string, HotspotUser>  $users
+     */
+    private function syncSharedQueues(Client $client, Collection $users): void
+    {
+        $parents = [];
+        $children = [];
+        foreach ($client->query(new Query('/queue/simple/print'))->read() as $position => $queue) {
+            $name = $queue['name'] ?? '';
+            $queue['position'] = $position;
+
+            if (($username = $this->usernameFromSharedQueueName($name)) !== null) {
+                $parents[$username] = $queue;
+            } elseif (($parsed = $this->parseQueueName($name)) !== null && $parsed[1] !== null) {
+                $children[$parsed[0]][] = $queue;
+            }
+        }
+
+        foreach ($children as $username => $queues) {
+            $user = $users->get($username);
+            $parent = $parents[$username] ?? null;
+            unset($parents[$username]);
+
+            if (! $user) {
+                continue;
+            }
+
+            $profile = $user->profile;
+
+            if (! $profile || $profile->bandwidth_mode !== 'shared' || ! $profile->rate_up || ! $profile->rate_down) {
+                foreach ($queues as $queue) {
+                    if (($queue['parent'] ?? 'none') !== 'none') {
+                        $client->query(
+                            (new Query('/queue/simple/set'))
+                                ->equal('.id', $queue['.id'])
+                                ->equal('parent', 'none')
+                                ->equal('limit-at', '0/0')
+                        )->read();
+                    }
+                }
+
+                if ($parent) {
+                    $client->query((new Query('/queue/simple/remove'))->equal('.id', $parent['.id']))->read();
+                }
+
+                continue;
+            }
+
+            $parentName = $this->sharedQueueName($user);
+            $maxLimit = "{$profile->rate_up}/{$profile->rate_down}";
+            $targets = array_column($queues, 'target');
+            sort($targets);
+
+            if (! $parent) {
+                // Keep the parent above its device queues, like WinBox
+                // shows a queue tree.
+                $client->query(
+                    (new Query('/queue/simple/add'))
+                        ->equal('name', $parentName)
+                        ->equal('target', implode(',', $targets))
+                        ->equal('max-limit', $maxLimit)
+                        ->equal('place-before', $queues[0]['.id'])
+                )->read();
+            } else {
+                $parentTargets = explode(',', $parent['target'] ?? '');
+                sort($parentTargets);
+
+                if (
+                    ($parent['name'] ?? null) !== $parentName
+                    || $parentTargets !== $targets
+                    || ! $this->sameRates($parent['max-limit'] ?? '', $maxLimit)
+                ) {
+                    $client->query(
+                        (new Query('/queue/simple/set'))
+                            ->equal('.id', $parent['.id'])
+                            ->equal('name', $parentName)
+                            ->equal('target', implode(',', $targets))
+                            ->equal('max-limit', $maxLimit)
+                    )->read();
+                }
+
+                if ($parent['position'] > $queues[0]['position']) {
+                    $client->query(
+                        (new Query('/queue/simple/move'))
+                            ->equal('numbers', $parent['.id'])
+                            ->equal('destination', $queues[0]['.id'])
+                    )->read();
+                }
+            }
+
+            $devices = max(1, (int) $profile->simultaneous_use);
+            $limitAt = intdiv($this->rateBps($profile->rate_up), $devices).'/'.intdiv($this->rateBps($profile->rate_down), $devices);
+
+            foreach ($queues as $queue) {
+                if (($queue['parent'] ?? 'none') !== $parentName || ! $this->sameRates($queue['limit-at'] ?? '', $limitAt)) {
+                    $client->query(
+                        (new Query('/queue/simple/set'))
+                            ->equal('.id', $queue['.id'])
+                            ->equal('parent', $parentName)
+                            ->equal('limit-at', $limitAt)
+                    )->read();
+                }
+            }
+        }
+
+        // Parents whose device queues are all gone.
+        foreach ($parents as $parent) {
+            $client->query((new Query('/queue/simple/remove'))->equal('.id', $parent['.id']))->read();
         }
     }
 
@@ -708,7 +879,8 @@ class MikrotikConnector
         $firstForeignId = null;
 
         foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
-            $ours = ($this->parseQueueName($queue['name'] ?? '')[1] ?? null) !== null;
+            $ours = ($this->parseQueueName($queue['name'] ?? '')[1] ?? null) !== null
+                || $this->usernameFromSharedQueueName($queue['name'] ?? '') !== null;
 
             if (! $ours) {
                 $firstForeignId ??= $queue['.id'] ?? null;
@@ -926,11 +1098,26 @@ class MikrotikConnector
                 }
             }
 
+            $parentIds = [];
             foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
+                if (
+                    ($parentUser = $this->usernameFromSharedQueueName($queue['name'] ?? '')) !== null
+                    && isset($usernameSet[$parentUser]) && isset($queue['.id'])
+                ) {
+                    $parentIds[] = $queue['.id'];
+
+                    continue;
+                }
+
                 $username = $this->parseQueueName($queue['name'] ?? '')[0] ?? null;
                 if ($username !== null && isset($usernameSet[$username]) && isset($queue['.id'])) {
                     $client->query((new Query('/queue/simple/remove'))->equal('.id', $queue['.id']))->read();
                 }
+            }
+
+            // Shared-bandwidth parents go last, once their device queues are gone.
+            foreach ($parentIds as $parentId) {
+                $client->query((new Query('/queue/simple/remove'))->equal('.id', $parentId))->read();
             }
 
             return ['ok' => true, 'message' => count($usernames).' user di-unbind.'];

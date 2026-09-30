@@ -99,6 +99,7 @@ class ProfileController extends Controller
             'name' => ['required', 'string', 'max:100', 'unique:profiles,name,'.($ignoreId ?? 'NULL').',id,client_id,'.$clientId],
             'rate_down' => ['nullable', 'string', 'max:20'],
             'rate_up' => ['nullable', 'string', 'max:20'],
+            'bandwidth_mode' => ['required', 'in:per_device,shared'],
             'session_timeout' => ['nullable', 'integer', 'min:0'],
             'idle_timeout' => ['nullable', 'integer', 'min:0'],
             'validity_value' => ['nullable', 'integer', 'min:1'],

@@ -34,6 +34,21 @@
                 </label>
                 <input name="rate_down" placeholder="2M" value="{{ old('rate_down', $p?->rate_down) }}" class="input font-mono" data-pf="down">
             </div>
+            <div class="sm:col-span-2">
+                <span class="label">{{ __('app.profile_form.bandwidth_mode_label') }}</span>
+                @php $bw = old('bandwidth_mode', $p?->bandwidth_mode ?? 'per_device'); @endphp
+                <div class="grid sm:grid-cols-2 gap-3">
+                    @foreach (['per_device' => ['bw_per_device', 'bw_per_device_desc'], 'shared' => ['bw_shared', 'bw_shared_desc']] as $val => [$labelKey, $descKey])
+                        <label class="relative flex gap-3 rounded-xl border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                            <input type="radio" name="bandwidth_mode" value="{{ $val }}" @checked($bw === $val) class="mt-0.5 border-gray-300 text-brand-600 focus:ring-brand-500" data-pf="bw">
+                            <span>
+                                <span class="block text-sm font-medium text-gray-900">{{ __('app.profile_form.'.$labelKey) }}</span>
+                                <span class="block text-xs text-gray-500 mt-0.5">{{ __('app.ui.profile_form.'.$descKey) }}</span>
+                            </span>
+                        </label>
+                    @endforeach
+                </div>
+            </div>
         </div>
     </section>
 
@@ -110,6 +125,7 @@
         <div class="flex flex-wrap items-center gap-2 text-sm">
             <span id="pfName" class="font-semibold text-gray-900"></span>
             <span class="badge bg-white border border-gray-200 text-gray-700">↑ <span id="pfUp"></span> · ↓ <span id="pfDown"></span></span>
+            <span class="badge bg-white border border-gray-200 text-gray-700" id="pfBw"></span>
             <span class="badge bg-white border border-gray-200 text-gray-700" id="pfValidity"></span>
             <span class="badge bg-white border border-gray-200 text-gray-700" id="pfDevices"></span>
         </div>
@@ -122,12 +138,14 @@
             unlimited: @json(__('app.ui.unlimited')),
             devices: @json(__('app.ui.profiles.devices_count')),
             units: {{ \Illuminate\Support\Js::from(['hour' => __('app.profile_form.unit_hour'), 'day' => __('app.profile_form.unit_day'), 'month' => __('app.profile_form.unit_month')]) }},
+            bw: {{ \Illuminate\Support\Js::from(['per_device' => __('app.profile_form.bw_per_device'), 'shared' => __('app.profile_form.bw_shared')]) }},
         };
         const f = (k) => document.querySelector(`[data-pf="${k}"]`);
         function render() {
             document.getElementById('pfName').textContent = f('name').value || '—';
             document.getElementById('pfUp').textContent = f('up').value || t.unlimited;
             document.getElementById('pfDown').textContent = f('down').value || t.unlimited;
+            document.getElementById('pfBw').textContent = '⇄ ' + t.bw[(document.querySelector('[data-pf="bw"]:checked') || {}).value || 'per_device'];
             const vv = f('vv').value, vu = f('vu').value;
             document.getElementById('pfValidity').textContent = '⏱ ' + (vv && vu ? `${vv} ${t.units[vu]}` : t.unlimited);
             document.getElementById('pfDevices').textContent = '📱 ' + t.devices.replace(':n', f('su').value || 1);

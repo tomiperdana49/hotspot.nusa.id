@@ -47,6 +47,7 @@
                                     <span title="{{ __('app.profile_form.rate_up_label') }}">↑ {{ $profile->rate_up ?: __('app.ui.unlimited') }}</span>
                                     <span title="{{ __('app.profile_form.rate_down_label') }}">↓ {{ $profile->rate_down ?: __('app.ui.unlimited') }}</span>
                                 </div>
+                                <div class="text-xs text-gray-400 mt-0.5">{{ $profile->bandwidth_mode === 'shared' ? __('app.profile_form.bw_shared') : __('app.profile_form.bw_per_device') }}</div>
                             </td>
                             <td class="px-5 py-3.5 text-gray-700">
                                 @if ($profile->validity_value && $profile->validity_unit)
