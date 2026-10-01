@@ -1112,11 +1112,26 @@ class MikrotikConnector
                 'timeout' => 8,
             ]);
 
+            $unboundMacs = [];
             foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
                 $username = $this->usernameFromTag($binding['comment'] ?? '');
                 if ($username !== null && isset($usernameSet[$username]) && isset($binding['.id'])) {
                     $client->query((new Query('/ip/hotspot/ip-binding/remove'))->equal('.id', $binding['.id']))->read();
+                    $unboundMacs[DeviceName::normalizeMac($binding['mac-address'] ?? '')] = true;
                 }
+            }
+
+            // Drop the hosts that rode those bindings too, so the devices
+            // land back on the login page right away (same as
+            // disconnectBypassedHost()) instead of staying bypassed.
+            if ($unboundMacs !== []) {
+                foreach ($client->query(new Query('/ip/hotspot/host/print'))->read() as $host) {
+                    if (isset($unboundMacs[DeviceName::normalizeMac($host['mac-address'] ?? '')]) && isset($host['.id'])) {
+                        $client->query((new Query('/ip/hotspot/host/remove'))->equal('.id', $host['.id']))->read();
+                    }
+                }
+
+                Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
             }
 
             $parentIds = [];
