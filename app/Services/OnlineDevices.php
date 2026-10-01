@@ -65,7 +65,9 @@ class OnlineDevices
             );
         });
 
-        foreach ($routers->where('status', 'verified') as $router) {
+        // Only routers the heartbeat has seen recently: dialing one that is
+        // switched off stalls the page until the API connect times out.
+        foreach ($routers->filter(fn (Router $router) => $router->is_online) as $router) {
             $hosts = array_filter(
                 $this->mikrotik->bypassedHosts($router),
                 fn ($host) => $users->has($host['username']) && ! isset($seenMacs[$host['username'].'|'.$host['mac']]),

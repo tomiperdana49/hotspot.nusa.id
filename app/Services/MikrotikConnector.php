@@ -331,6 +331,7 @@ class MikrotikConnector
                 'pass' => $router->api_pass,
                 'port' => (int) $router->api_port,
                 'timeout' => $timeout,
+                'attempts' => 1,
             ]);
 
             $identity = $client->query(new Query('/system/identity/print'))->read();
@@ -917,6 +918,7 @@ class MikrotikConnector
                     'pass' => $router->api_pass,
                     'port' => (int) $router->api_port,
                     'timeout' => 4,
+                    'attempts' => 1,
                 ]);
 
                 $hosts = $client->query(new Query('/ip/hotspot/host/print'))->read();
@@ -1156,6 +1158,7 @@ class MikrotikConnector
                     'pass' => $router->api_pass,
                     'port' => (int) $router->api_port,
                     'timeout' => 4,
+                    'attempts' => 1,
                 ]);
 
                 $leases = $client->query(
