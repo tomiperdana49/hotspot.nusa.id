@@ -54,6 +54,18 @@ class ClientLoginController extends Controller
 
     public function destroy(Request $request): RedirectResponse
     {
+        // An admin viewing this panel: leave the client side only and go
+        // back to the admin panel, keeping the admin signed in.
+        if ($request->session()->has('impersonator_admin_id')) {
+            Auth::guard('client')->logout();
+            $clientId = $request->session()->pull('impersonated_client_id');
+            $request->session()->forget('impersonator_admin_id');
+
+            return Auth::guard('admin')->check() && $clientId
+                ? redirect()->route('admin.clients.show', $clientId)
+                : redirect()->route('admin.login');
+        }
+
         Auth::guard('client')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

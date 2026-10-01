@@ -430,4 +430,11 @@ return [
             'Host-Request' => 'Diputus sistem',
         ],
     ],
+
+    'impersonate' => [
+        'button' => 'Masuk sebagai client',
+        'banner' => 'Anda sedang melihat panel :client sebagai :email (mode admin).',
+        'leave' => 'Kembali ke admin',
+        'no_user' => 'Client ini belum punya akun login yang aktif.',
+    ],
 ];

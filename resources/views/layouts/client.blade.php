@@ -85,6 +85,15 @@
         </aside>
         <main class="flex-1 min-w-0">
             <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-8">
+                @if (session('impersonator_admin_id'))
+                    <div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <p>{{ __('app.impersonate.banner', ['client' => Auth::guard('client')->user()->client?->name, 'email' => Auth::guard('client')->user()->email]) }}</p>
+                        <form method="POST" action="{{ route('logout') }}" class="shrink-0">
+                            @csrf
+                            <button class="btn-secondary !py-1.5">{{ __('app.impersonate.leave') }}</button>
+                        </form>
+                    </div>
+                @endif
                 @include('layouts.partials.flash')
                 @yield('content')
             </div>

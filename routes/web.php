@@ -31,6 +31,7 @@ Route::post('/admin/logout', [AdminLoginController::class, 'destroy'])->name('ad
 Route::middleware('auth:admin')->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
     Route::resource('clients', AdminClientController::class)->except(['destroy']);
+    Route::post('/clients/{client}/impersonate', [AdminClientController::class, 'impersonate'])->name('clients.impersonate');
     Route::post('/clients/{client}/users/{clientUser}/reset-password', [AdminClientController::class, 'resetUserPassword'])
         ->name('clients.users.reset-password');
 });

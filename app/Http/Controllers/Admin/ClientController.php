@@ -7,8 +7,10 @@ use App\Models\Client;
 use App\Models\ClientUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ClientController extends Controller
@@ -75,6 +77,41 @@ class ClientController extends Controller
         ];
 
         return view('admin.clients.show', compact('client', 'userStats'));
+    }
+
+    /**
+     * Open the client panel as this client's owner (or its first active
+     * account), so an admin can see and fix what the client sees. The admin
+     * session stays signed in alongside; logging out of the client panel
+     * comes back here instead of ending it. last_login_at is left alone so
+     * the client's own login stats stay true.
+     */
+    public function impersonate(Request $request, Client $client): RedirectResponse
+    {
+        $user = $client->users()
+            ->where('is_active', true)
+            ->orderByRaw("role = 'owner' DESC")
+            ->oldest('id')
+            ->first();
+
+        if (! $user) {
+            return back()->withErrors(['client' => __('app.impersonate.no_user')]);
+        }
+
+        $admin = Auth::guard('admin')->user();
+
+        Auth::guard('client')->login($user);
+        $request->session()->put('impersonator_admin_id', $admin->id);
+        $request->session()->put('impersonated_client_id', $client->id);
+
+        Log::info('Admin opened a client panel', [
+            'admin_id' => $admin->id,
+            'admin_email' => $admin->email,
+            'client_id' => $client->id,
+            'client_user_id' => $user->id,
+        ]);
+
+        return redirect()->route('client.dashboard');
     }
 
     public function resetUserPassword(Request $request, Client $client, ClientUser $clientUser): RedirectResponse

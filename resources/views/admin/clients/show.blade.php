@@ -25,6 +25,13 @@
                 <span class="badge bg-red-50 text-red-700"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>{{ $client->status }}</span>
             @endif
             <a href="{{ route('admin.clients.edit', $client) }}" class="btn-secondary">{{ __('app.user_index.edit') }}</a>
+            <form method="POST" action="{{ route('admin.clients.impersonate', $client) }}">
+                @csrf
+                <button class="btn-primary">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {{ __('app.impersonate.button') }}
+                </button>
+            </form>
         </div>
     </div>
 

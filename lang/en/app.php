@@ -430,4 +430,11 @@ return [
             'Host-Request' => 'Disconnected by system',
         ],
     ],
+
+    'impersonate' => [
+        'button' => 'Log in as client',
+        'banner' => 'You are viewing the :client panel as :email (admin mode).',
+        'leave' => 'Back to admin',
+        'no_user' => 'This client has no active login account.',
+    ],
 ];
