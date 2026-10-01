@@ -701,14 +701,23 @@ class MikrotikConnector
             // Bypassed devices never show up in /ip/hotspot/active, so the
             // loop above can't reach them: keep their binding comment and
             // queue name current here (voucher renewals, tag format changes).
+            $staleUsernames = [];
             foreach ($boundByMac as $mac => $binding) {
                 if (isset($handledMacs[$mac])) {
                     continue;
                 }
 
-                $user = $users->get($this->usernameFromTag($binding['comment'] ?? ''));
+                $bindingUser = $this->usernameFromTag($binding['comment'] ?? '');
+                $user = $users->get($bindingUser);
 
-                if (! $user) {
+                // RADIUS already refuses these at login, but a bypassed
+                // device never logs in again: take it off the router here.
+                // Covers a voucher disabled or expired while its devices
+                // were bound, and one deleted or renamed while this router
+                // was unreachable.
+                if (! $user || in_array($user->status, ['disabled', 'expired'], true) || $user->expires_at?->isPast()) {
+                    $staleUsernames[$bindingUser] = true;
+
                     continue;
                 }
 
@@ -753,6 +762,10 @@ class MikrotikConnector
                             ->equal('max-limit', "{$profile->rate_up}/{$profile->rate_down}")
                     )->read();
                 }
+            }
+
+            if ($staleUsernames !== []) {
+                $this->unbindUsers($router, array_keys($staleUsernames));
             }
 
             $this->syncSharedQueues($client, $users);
@@ -1091,6 +1104,69 @@ class MikrotikConnector
      *
      * @return array{ok: bool, message: string}
      */
+    /**
+     * Carry a voucher's bound devices over to its new username: retag the
+     * ip-bindings and rename the device queues and the shared parent, so
+     * the devices stay online and the sync keeps recognizing them. Without
+     * this the sync can no longer match them to a user.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function renameUser(Router $router, string $oldUsername, HotspotUser $user): array
+    {
+        if (blank($router->api_host) || $oldUsername === $user->username) {
+            return ['ok' => false, 'message' => 'Tidak ada yang perlu diganti.'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+                'attempts' => 1,
+            ]);
+
+            foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
+                if ($this->usernameFromTag($binding['comment'] ?? '') === $oldUsername && isset($binding['.id'])) {
+                    $client->query(
+                        (new Query('/ip/hotspot/ip-binding/set'))
+                            ->equal('.id', $binding['.id'])
+                            ->equal('comment', $this->bindingTag($user))
+                    )->read();
+                }
+            }
+
+            // RouterOS tracks a child's parent by id, so renaming the parent
+            // doesn't detach its device queues.
+            foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
+                $name = $queue['name'] ?? '';
+                $newName = null;
+
+                if ($this->usernameFromSharedQueueName($name) === $oldUsername) {
+                    $newName = $this->sharedQueueName($user);
+                } elseif (($parsed = $this->parseQueueName($name)) !== null && $parsed[0] === $oldUsername && $parsed[1] !== null) {
+                    $newName = $this->queueName($user, $parsed[1]);
+                }
+
+                if ($newName !== null && isset($queue['.id'])) {
+                    $client->query(
+                        (new Query('/queue/simple/set'))
+                            ->equal('.id', $queue['.id'])
+                            ->equal('name', $newName)
+                    )->read();
+                }
+            }
+
+            Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
+
+            return ['ok' => true, 'message' => 'Username di router diperbarui.'];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Gagal memperbarui router: '.$e->getMessage()];
+        }
+    }
+
     public function unbindUser(Router $router, string $username): array
     {
         return $this->unbindUsers($router, [$username]);
@@ -1120,6 +1196,7 @@ class MikrotikConnector
                 'pass' => $router->api_pass,
                 'port' => (int) $router->api_port,
                 'timeout' => 8,
+                'attempts' => 1,
             ]);
 
             $unboundMacs = [];

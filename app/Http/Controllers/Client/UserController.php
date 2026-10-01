@@ -176,6 +176,24 @@ class UserController extends Controller
             ->whereNull('acctstoptime')
             ->update(['username' => $data['username']]);
 
+        // Apply it on the routers now rather than at the next sync. Offline
+        // routers are skipped; the sync unbinds what they still hold.
+        $routers = Router::where('client_id', $hotspotUser->client_id)->get()->filter->is_online;
+
+        if ($oldUsername !== $hotspotUser->username) {
+            foreach ($routers as $router) {
+                $this->mikrotik->renameUser($router, $oldUsername, $hotspotUser);
+            }
+        }
+
+        if (in_array($hotspotUser->status, ['disabled', 'expired'], true) || $hotspotUser->expires_at?->isPast()) {
+            $this->disconnectActiveSessions([$hotspotUser->username], $hotspotUser->client_id);
+
+            foreach ($routers as $router) {
+                $this->mikrotik->unbindUsers($router, [$hotspotUser->username]);
+            }
+        }
+
         return redirect()->route('client.users.index')->with('status', 'User diperbarui.');
     }
 
