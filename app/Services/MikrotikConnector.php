@@ -584,6 +584,10 @@ class MikrotikConnector
             ));
 
             if (empty($usernames)) {
+                // Still drop shared parents left behind by the last device
+                // going away, or they would linger until someone logs in.
+                $this->syncSharedQueues($client, collect());
+
                 return ['ok' => true, 'message' => 'Tidak ada sesi aktif.'];
             }
 
@@ -1025,6 +1029,13 @@ class MikrotikConnector
                     $client->query((new Query('/ip/hotspot/host/remove'))->equal('.id', $host['.id']))->read();
                 }
             }
+
+            // Shrink the voucher's shared parent queue to the devices left,
+            // or remove it with the last one.
+            $this->syncSharedQueues(
+                $client,
+                HotspotUser::where('username', $username)->with('profile')->get()->keyBy('username'),
+            );
 
             Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
 
