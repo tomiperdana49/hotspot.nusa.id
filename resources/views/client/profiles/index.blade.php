@@ -30,6 +30,7 @@
                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         <th class="px-5 py-3">{{ __('app.profile_index.col_name') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_speed') }}</th>
+                        <th class="px-5 py-3">{{ __('app.profile_form.bandwidth_mode_label') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_duration') }}</th>
                         <th class="px-5 py-3">{{ __('app.ui.profiles.col_devices') }}</th>
                         <th class="px-5 py-3"></th>
@@ -47,7 +48,13 @@
                                     <span title="{{ __('app.profile_form.rate_up_label') }}">↑ {{ $profile->rate_up ?: __('app.ui.unlimited') }}</span>
                                     <span title="{{ __('app.profile_form.rate_down_label') }}">↓ {{ $profile->rate_down ?: __('app.ui.unlimited') }}</span>
                                 </div>
-                                <div class="text-xs text-gray-400 mt-0.5">{{ $profile->bandwidth_mode === 'shared' ? __('app.profile_form.bw_shared') : __('app.profile_form.bw_per_device') }}</div>
+                            </td>
+                            <td class="px-5 py-3.5">
+                                @if ($profile->bandwidth_mode === 'shared')
+                                    <span class="badge bg-amber-50 text-amber-700" title="{{ __('app.ui.profile_form.bw_shared_desc') }}">{{ __('app.profile_form.bw_shared') }}</span>
+                                @else
+                                    <span class="badge bg-sky-50 text-sky-700" title="{{ __('app.ui.profile_form.bw_per_device_desc') }}">{{ __('app.profile_form.bw_per_device') }}</span>
+                                @endif
                             </td>
                             <td class="px-5 py-3.5 text-gray-700">
                                 @if ($profile->validity_value && $profile->validity_unit)
