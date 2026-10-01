@@ -45,19 +45,19 @@ class HistoryController extends Controller
         return response()->streamDownload(function () use ($query) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel reads names correctly
-            fputcsv($out, [
+            fputcsv($out, array_map($this->csvCell(...), [
                 __('app.history.col_start'), __('app.history.col_stop'), __('app.history.col_duration'),
                 __('app.user_index.col_username'), __('app.ui.devices.device_name'), __('app.user_index.modal_mac'),
                 __('app.user_index.modal_ip'), __('app.nav.router'), __('app.history.col_download'),
                 __('app.history.col_upload'), __('app.history.col_reason'),
-            ]);
+            ]));
 
             foreach ($query->cursor() as $row) {
                 $s = $this->present($row);
-                fputcsv($out, [
+                fputcsv($out, array_map($this->csvCell(...), [
                     $s['start'], $s['stop'] ?? __('app.history.still_online'), $s['duration'], $s['username'],
                     $s['device_name'], $s['mac'], $s['ip'], $s['router'], $s['download'], $s['upload'], $s['reason'],
-                ]);
+                ]));
             }
 
             fclose($out);
@@ -132,6 +132,18 @@ class HistoryController extends Controller
                 'a.acctstoptime', 'a.acctsessiontime', 'a.acctinputoctets', 'a.acctoutputoctets',
                 'a.acctterminatecause', 'a.nasipaddress', 'r.name as router_name', 'd.name as device_name',
             ]);
+    }
+
+    /**
+     * Device names come from DHCP hostnames, which anyone on the hotspot
+     * can set: a cell starting like a formula ("=HYPERLINK(...)") would run
+     * when the export is opened in Excel. Prefix it with ' so it stays text.
+     */
+    private function csvCell(mixed $value): mixed
+    {
+        return is_string($value) && $value !== '-' && preg_match('/^[=+\-@\t\r]/', $value)
+            ? "'".$value
+            : $value;
     }
 
     private function present(object $row): array
