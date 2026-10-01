@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Auth;
 
 class AdminLoginController extends Controller
 {
+    use ThrottlesLogins;
+
     public function create()
     {
         if (Auth::guard('admin')->check()) {
@@ -25,9 +27,15 @@ class AdminLoginController extends Controller
             'password' => ['required'],
         ]);
 
+        $this->ensureNotLockedOut($request, 'admin');
+
         if (! Auth::guard('admin')->attempt($credentials, $request->boolean('remember'))) {
+            $this->recordFailedLogin($request, 'admin');
+
             return back()->withErrors(['email' => 'Email atau password salah.'])->onlyInput('email');
         }
+
+        $this->clearFailedLogins($request, 'admin');
 
         if (! Auth::guard('admin')->user()->is_active) {
             Auth::guard('admin')->logout();

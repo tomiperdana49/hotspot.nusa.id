@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Auth;
 
 class ClientLoginController extends Controller
 {
+    use ThrottlesLogins;
+
     public function create()
     {
         if (Auth::guard('client')->check()) {
@@ -25,9 +27,15 @@ class ClientLoginController extends Controller
             'password' => ['required'],
         ]);
 
+        $this->ensureNotLockedOut($request, 'client');
+
         if (! Auth::guard('client')->attempt($credentials, $request->boolean('remember'))) {
+            $this->recordFailedLogin($request, 'client');
+
             return back()->withErrors(['email' => 'Email atau password salah.'])->onlyInput('email');
         }
+
+        $this->clearFailedLogins($request, 'client');
 
         $user = Auth::guard('client')->user();
 

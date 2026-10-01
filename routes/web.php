@@ -21,12 +21,12 @@ Route::get('/locale/{locale}', [LocaleController::class, 'switch'])->name('local
 
 // --- Client auth (default login) ---
 Route::get('/login', [ClientLoginController::class, 'create'])->name('login');
-Route::post('/login', [ClientLoginController::class, 'store'])->name('login.attempt');
+Route::post('/login', [ClientLoginController::class, 'store'])->middleware('throttle:20,1')->name('login.attempt');
 Route::post('/logout', [ClientLoginController::class, 'destroy'])->name('logout');
 
 // --- Admin auth ---
 Route::get('/admin/login', [AdminLoginController::class, 'create'])->name('admin.login');
-Route::post('/admin/login', [AdminLoginController::class, 'store'])->name('admin.login.attempt');
+Route::post('/admin/login', [AdminLoginController::class, 'store'])->middleware('throttle:20,1')->name('admin.login.attempt');
 Route::post('/admin/logout', [AdminLoginController::class, 'destroy'])->name('admin.logout');
 
 // --- Admin panel ---
