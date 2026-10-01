@@ -725,13 +725,23 @@ class MikrotikConnector
                 $queue = $queueByMac[$mac] ?? null;
                 $queueName = $this->queueName($user, $mac);
                 $profile = $user->profile;
+                $maxLimit = $profile?->rate_up && $profile?->rate_down ? "{$profile->rate_up}/{$profile->rate_down}" : null;
 
-                if ($queue && ($queue['name'] ?? null) !== $queueName) {
-                    $client->query(
-                        (new Query('/queue/simple/set'))
-                            ->equal('.id', $queue['.id'])
-                            ->equal('name', $queueName)
-                    )->read();
+                if ($queue && (
+                    ($queue['name'] ?? null) !== $queueName
+                    || ($maxLimit && ! $this->sameRates($queue['max-limit'] ?? '', $maxLimit))
+                )) {
+                    // Also follows a profile change: the voucher moved to a
+                    // profile with another rate while this device was bound.
+                    $set = (new Query('/queue/simple/set'))
+                        ->equal('.id', $queue['.id'])
+                        ->equal('name', $queueName);
+
+                    if ($maxLimit) {
+                        $set->equal('max-limit', $maxLimit);
+                    }
+
+                    $client->query($set)->read();
                 } elseif (! $queue && ! empty($binding['to-address']) && $profile?->rate_up && $profile?->rate_down) {
                     // A bound device has left /ip/hotspot/active for good, so
                     // if its queue was never created (or got removed) this is
