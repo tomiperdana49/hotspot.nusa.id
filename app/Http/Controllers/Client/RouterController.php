@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Services\MikrotikConnector;
 use App\Services\RouterPairingService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +25,35 @@ class RouterController extends Controller
         $routers = Router::where('client_id', $clientId)->latest()->get();
 
         return view('client.routers.index', compact('routers'));
+    }
+
+    /**
+     * Ping each of the client's verified routers right now, so the list
+     * page can show a router that just came up (or went down) without
+     * waiting for the next heartbeat. Called from the page after it loads.
+     */
+    public function liveStatus(): JsonResponse
+    {
+        $clientId = Auth::guard('client')->user()->client_id;
+        $routers = Router::where('client_id', $clientId)->where('status', 'verified')->get();
+
+        $status = $routers->map(function (Router $router) {
+            $identity = $this->connector->ping($router, 3);
+
+            if ($identity !== null) {
+                $router->update(['last_seen_at' => now()]);
+                $this->connector->syncIdentity($router, $identity);
+            }
+
+            return [
+                'id' => $router->id,
+                'online' => $identity !== null,
+                'name' => $router->name,
+                'last_seen' => $router->last_seen_at?->diffForHumans() ?? '-',
+            ];
+        });
+
+        return response()->json($status->values());
     }
 
     public function create()

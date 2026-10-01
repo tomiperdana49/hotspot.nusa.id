@@ -43,6 +43,7 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
 
     Route::resource('profiles', ProfileController::class)->except(['show']);
 
+    Route::get('/routers/live-status', [RouterController::class, 'liveStatus'])->name('routers.live-status');
     Route::resource('routers', RouterController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('/routers/{router}/connect', [RouterController::class, 'connect'])->name('routers.connect');
 

@@ -43,14 +43,14 @@
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($routers as $router)
                         <tr class="hover:bg-gray-50">
-                            <td class="px-5 py-3.5 font-medium">{{ $router->name }}</td>
+                            <td class="px-5 py-3.5 font-medium" data-router-name="{{ $router->id }}">{{ $router->name }}</td>
                             <td class="px-5 py-3.5 font-mono text-xs text-gray-500">{{ $router->nas_ip ?? '-' }}</td>
                             <td class="px-5 py-3.5">
                                 @php $colors = ['pending' => 'bg-amber-50 text-amber-700', 'verified' => 'bg-green-50 text-green-700', 'disabled' => 'bg-red-50 text-red-700']; @endphp
                                 @php $dots = ['pending' => 'bg-amber-500', 'verified' => 'bg-green-500', 'disabled' => 'bg-red-500']; @endphp
                                 <span class="badge {{ $colors[$router->status] }}"><span class="dot {{ $dots[$router->status] }}"></span>{{ __('app.ui.router_status.'.$router->status) }}</span>
                             </td>
-                            <td class="px-5 py-3.5">
+                            <td class="px-5 py-3.5" data-router-live="{{ $router->status === 'verified' ? $router->id : '' }}">
                                 @if ($router->status === 'verified')
                                     <span class="badge {{ $router->is_online ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700' }}">
                                         <span class="w-1.5 h-1.5 rounded-full {{ $router->is_online ? 'bg-green-500' : 'bg-red-500' }}"></span>{{ $router->is_online ? __('app.router_index.online') : __('app.router_index.offline') }}
@@ -59,7 +59,7 @@
                                     <span class="text-gray-300">—</span>
                                 @endif
                             </td>
-                            <td class="px-5 py-3.5 text-gray-500">{{ $router->last_seen_at?->diffForHumans() ?? '-' }}</td>
+                            <td class="px-5 py-3.5 text-gray-500" data-router-seen="{{ $router->id }}">{{ $router->last_seen_at?->diffForHumans() ?? '-' }}</td>
                             <td class="px-5 py-3.5 text-right">
                                 <a href="{{ route('client.routers.show', $router) }}" class="btn-sm-edit">
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" stroke-linejoin="round"/><circle cx="12" cy="12" r="3"/></svg>
@@ -91,6 +91,27 @@
                 },
                 columnDefs: [{ orderable: false, targets: -1 }],
             });
+
+            // The badges above come from the last heartbeat (every 5 min);
+            // check each router once now so a router that just came up or
+            // went down shows its real state without waiting for the next one.
+            const liveCells = $('[data-router-live]').filter((_, el) => el.dataset.routerLive !== '');
+            if (! liveCells.length) return;
+
+            liveCells.addClass('animate-pulse');
+            const badge = (online) => online
+                ? '<span class="badge bg-green-50 text-green-700"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>{{ __('app.router_index.online') }}</span>'
+                : '<span class="badge bg-red-50 text-red-700"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>{{ __('app.router_index.offline') }}</span>';
+
+            fetch('{{ route('client.routers.live-status') }}', { headers: { Accept: 'application/json' } })
+                .then((res) => res.ok ? res.json() : [])
+                .then((routers) => routers.forEach((r) => {
+                    $(`[data-router-live="${r.id}"]`).html(badge(r.online));
+                    $(`[data-router-seen="${r.id}"]`).text(r.last_seen);
+                    $(`[data-router-name="${r.id}"]`).text(r.name);
+                }))
+                .catch(() => {})
+                .finally(() => liveCells.removeClass('animate-pulse'));
         });
     </script>
     @endif
