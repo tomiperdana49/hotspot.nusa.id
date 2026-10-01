@@ -13,9 +13,7 @@ use App\Http\Controllers\Client\UserController;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect()->route('login');
-});
+Route::view('/', 'landing')->name('home');
 
 Route::get('/locale/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
 
