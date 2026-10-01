@@ -565,9 +565,7 @@ class MikrotikConnector
 
             $queueByMac = [];
             $legacyQueues = [];
-            $queues = $client->query(new Query('/queue/simple/print'))->read();
-            $topQueueId = $queues[0]['.id'] ?? null;
-            foreach ($queues as $queue) {
+            foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
                 $parsed = $this->parseQueueName($queue['name'] ?? '');
                 if ($parsed === null) {
                     continue;
@@ -670,18 +668,17 @@ class MikrotikConnector
                 }
 
                 if (! $existingQueue) {
-                    // Simple queues match first-to-last: add on top so the
-                    // hotspot's own catch-all queue can't shadow this one.
-                    $add = (new Query('/queue/simple/add'))
-                        ->equal('name', $queueName)
-                        ->equal('target', $target)
-                        ->equal('max-limit', $maxLimit);
-
-                    if ($topQueueId) {
-                        $add->equal('place-before', $topQueueId);
-                    }
-
-                    $client->query($add)->read();
+                    // keepQueuesOnTop() below moves it above the hotspot's
+                    // catch-all queue. No place-before here: an .id read at
+                    // the start of the sync can be stale by now (RouterOS
+                    // re-creates its dynamic hs-<server> queue), failing the
+                    // add and leaving the device bound with no rate limit.
+                    $client->query(
+                        (new Query('/queue/simple/add'))
+                            ->equal('name', $queueName)
+                            ->equal('target', $target)
+                            ->equal('max-limit', $maxLimit)
+                    )->read();
                 } elseif (
                     ($existingQueue['name'] ?? null) !== $queueName
                     || ($existingQueue['target'] ?? null) !== $target
@@ -723,12 +720,23 @@ class MikrotikConnector
 
                 $queue = $queueByMac[$mac] ?? null;
                 $queueName = $this->queueName($user, $mac);
+                $profile = $user->profile;
 
                 if ($queue && ($queue['name'] ?? null) !== $queueName) {
                     $client->query(
                         (new Query('/queue/simple/set'))
                             ->equal('.id', $queue['.id'])
                             ->equal('name', $queueName)
+                    )->read();
+                } elseif (! $queue && ! empty($binding['to-address']) && $profile?->rate_up && $profile?->rate_down) {
+                    // A bound device has left /ip/hotspot/active for good, so
+                    // if its queue was never created (or got removed) this is
+                    // the only place left to give it its rate limit back.
+                    $client->query(
+                        (new Query('/queue/simple/add'))
+                            ->equal('name', $queueName)
+                            ->equal('target', "{$binding['to-address']}/32")
+                            ->equal('max-limit', "{$profile->rate_up}/{$profile->rate_down}")
                     )->read();
                 }
             }
