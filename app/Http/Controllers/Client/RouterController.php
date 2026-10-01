@@ -6,14 +6,26 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Services\MikrotikConnector;
 use App\Services\RouterPairingService;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\IpUtils;
 use Symfony\Component\HttpFoundation\Response;
 
 class RouterController extends Controller
 {
+    /**
+     * Never a router: loopback, "this host", link-local (incl. the cloud
+     * metadata service at 169.254.169.254), multicast, reserved, and
+     * IPv4-mapped IPv6 that could smuggle any of those past this list.
+     */
+    private const BLOCKED_API_RANGES = [
+        '0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4',
+        '::/128', '::1/128', '::ffff:0:0/96', 'fe80::/10', 'ff00::/8',
+    ];
+
     public function __construct(
         private readonly RouterPairingService $pairing,
         private readonly MikrotikConnector $connector,
@@ -132,11 +144,37 @@ class RouterController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'api_host' => ['required', 'ip'],
+            'api_host' => ['required', 'ip', function (string $attribute, mixed $value, Closure $fail) {
+                if ($error = $this->apiHostError((string) $value)) {
+                    $fail($error);
+                }
+            }],
             'api_user' => ['required', 'string', 'max:64'],
             'api_pass' => ['required', 'string', 'max:255'],
             'api_port' => ['required', 'integer', 'min:1', 'max:65535'],
         ]);
+    }
+
+    /**
+     * The server dials api_host itself, so an arbitrary address would let a
+     * client point it at the server's own services or at another
+     * client's router (SSRF). Private ranges stay allowed: routers are
+     * reached over the LAN and WireGuard.
+     */
+    private function apiHostError(string $ip): ?string
+    {
+        $ownIps = collect(net_get_interfaces() ?: [])
+            ->flatMap(fn (array $interface) => array_column($interface['unicast'] ?? [], 'address'));
+
+        if (IpUtils::checkIp($ip, self::BLOCKED_API_RANGES) || $ownIps->contains($ip)) {
+            return 'Alamat IP ini tidak bisa dipakai untuk router.';
+        }
+
+        $takenByOtherClient = Router::where('client_id', '!=', Auth::guard('client')->user()->client_id)
+            ->where(fn ($q) => $q->where('api_host', $ip)->orWhere('vpn_ip', $ip)->orWhere('nas_ip', $ip))
+            ->exists();
+
+        return $takenByOtherClient ? 'Alamat IP ini sudah dipakai router lain.' : null;
     }
 
     private function serverIp(): string
