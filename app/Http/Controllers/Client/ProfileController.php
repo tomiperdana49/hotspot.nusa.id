@@ -95,11 +95,12 @@ class ProfileController extends Controller
     {
         $clientId = Auth::guard('client')->user()->client_id;
 
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:100', 'unique:profiles,name,'.($ignoreId ?? 'NULL').',id,client_id,'.$clientId],
             'rate_down' => ['nullable', 'string', 'max:20'],
             'rate_up' => ['nullable', 'string', 'max:20'],
             'bandwidth_mode' => ['required', 'in:per_device,shared'],
+            'connection_mode' => ['required', 'in:binding,hotspot'],
             'session_timeout' => ['nullable', 'integer', 'min:0'],
             'idle_timeout' => ['nullable', 'integer', 'min:0'],
             'validity_value' => ['nullable', 'integer', 'min:1'],
@@ -108,6 +109,14 @@ class ProfileController extends Controller
             'simultaneous_use' => ['required', 'integer', 'min:1', 'max:255'],
             'mikrotik_group' => ['required', 'string', 'max:64'],
         ]);
+
+        // Sharing a voucher's rate needs the per-device queues that only
+        // binding mode creates; a plain hotspot session gets the full rate.
+        if ($data['connection_mode'] === 'hotspot') {
+            $data['bandwidth_mode'] = 'per_device';
+        }
+
+        return $data;
     }
 
     private function uniqueGroupName(string $clientCode, string $profileName): string

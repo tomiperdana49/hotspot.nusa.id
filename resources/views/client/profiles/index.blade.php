@@ -30,6 +30,7 @@
                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         <th class="px-5 py-3">{{ __('app.profile_index.col_name') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_speed') }}</th>
+                        <th class="px-5 py-3">{{ __('app.profile_form.connection_mode_label') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_form.bandwidth_mode_label') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_duration') }}</th>
                         <th class="px-5 py-3">{{ __('app.ui.profiles.col_devices') }}</th>
@@ -48,6 +49,13 @@
                                     <span title="{{ __('app.profile_form.rate_up_label') }}">↑ {{ $profile->rate_up ?: __('app.ui.unlimited') }}</span>
                                     <span title="{{ __('app.profile_form.rate_down_label') }}">↓ {{ $profile->rate_down ?: __('app.ui.unlimited') }}</span>
                                 </div>
+                            </td>
+                            <td class="px-5 py-3.5">
+                                @if ($profile->connection_mode === 'hotspot')
+                                    <span class="badge bg-gray-100 text-gray-700" title="{{ __('app.ui.profile_form.conn_hotspot_desc') }}">{{ __('app.profile_form.conn_hotspot') }}</span>
+                                @else
+                                    <span class="badge bg-violet-50 text-violet-700" title="{{ __('app.ui.profile_form.conn_binding_desc') }}">{{ __('app.profile_form.conn_binding') }}</span>
+                                @endif
                             </td>
                             <td class="px-5 py-3.5">
                                 @if ($profile->bandwidth_mode === 'shared')

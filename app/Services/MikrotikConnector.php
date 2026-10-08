@@ -616,6 +616,12 @@ class MikrotikConnector
                     continue;
                 }
 
+                // "Hotspot" profiles stay plain hotspot sessions: RADIUS
+                // already applies their rate limit, timeouts and device limit.
+                if ($user->profile?->connection_mode === 'hotspot') {
+                    continue;
+                }
+
                 $tag = $this->bindingTag($user);
                 $existingBinding = $boundByMac[$mac] ?? null;
                 $handledMacs[$mac] = true;
@@ -722,7 +728,10 @@ class MikrotikConnector
                 // Covers a voucher disabled or expired while its devices
                 // were bound, and one deleted or renamed while this router
                 // was unreachable.
-                if (! $user || in_array($user->status, ['disabled', 'expired'], true) || $user->expires_at?->isPast()) {
+                // Also a voucher whose profile switched to hotspot mode: drop
+                // the bypass so its devices log in through the hotspot again.
+                if (! $user || in_array($user->status, ['disabled', 'expired'], true) || $user->expires_at?->isPast()
+                    || $user->profile?->connection_mode === 'hotspot') {
                     $staleUsernames[$bindingUser] = true;
 
                     continue;
