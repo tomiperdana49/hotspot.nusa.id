@@ -97,7 +97,7 @@ class UserController extends Controller
             'prefix' => ['nullable', 'string', 'max:16'],
             'code_length' => ['required', 'integer', 'min:4', 'max:20'],
             'charset' => ['required', 'in:numeric,lower,upper,alnum'],
-            'same_password' => ['nullable', 'boolean'],
+            'password_mode' => ['required', 'in:random,shared,username'],
         ]);
 
         Profile::where('client_id', $client->id)->findOrFail($data['profile_id']);
@@ -111,7 +111,8 @@ class UserController extends Controller
             'prefix' => $data['prefix'] ?? null,
             'code_length' => $data['code_length'],
             'charset' => $data['charset'],
-            'same_password' => $request->boolean('same_password'),
+            'same_password' => $data['password_mode'] === 'shared',
+            'password_as_username' => $data['password_mode'] === 'username',
             'created_by' => Auth::guard('client')->id(),
         ]);
 

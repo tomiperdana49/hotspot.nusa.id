@@ -20,6 +20,7 @@ class Router extends Model
         'client_id', 'name', 'nas_ip', 'nas_identifier', 'radius_secret',
         'pairing_code', 'status', 'board_serial', 'api_host', 'api_port',
         'api_user', 'api_pass', 'vpn_ip', 'vpn_pubkey', 'last_seen_at', 'verified_at',
+        'login_template_dir', 'login_template_applied_at', 'html_directory_backup',
     ];
 
     protected $hidden = ['radius_secret', 'api_pass'];
@@ -30,6 +31,8 @@ class Router extends Model
             'last_seen_at' => 'datetime',
             'verified_at' => 'datetime',
             'api_pass' => 'encrypted',
+            'login_template_applied_at' => 'datetime',
+            'html_directory_backup' => 'array',
         ];
     }
 

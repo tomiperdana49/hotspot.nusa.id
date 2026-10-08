@@ -121,9 +121,20 @@
                         <code id="usernamePreview" class="font-mono font-semibold text-gray-900 truncate"></code>
                     </div>
 
-                    <label class="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" name="same_password" value="1" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500"> {{ __('app.user_create.same_password') }}
-                    </label>
+                    <div>
+                        <span class="label">{{ __('app.user_create.password_mode_label') }}</span>
+                        <div class="grid sm:grid-cols-3 gap-3">
+                            @foreach (['random', 'shared', 'username'] as $pwMode)
+                                <label class="flex gap-2.5 rounded-xl border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                                    <input type="radio" name="password_mode" value="{{ $pwMode }}" @checked(old('password_mode', 'random') === $pwMode) class="mt-0.5 border-gray-300 text-brand-600 focus:ring-brand-500">
+                                    <span>
+                                        <span class="block text-sm font-medium text-gray-900">{{ __('app.user_create.password_modes.'.$pwMode) }}</span>
+                                        <span class="block text-xs text-gray-500 mt-0.5">{{ __('app.user_create.password_modes.'.$pwMode.'_desc') }}</span>
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
                     <button type="submit" class="btn-primary w-full">{{ __('app.user_create.generate_batch') }}</button>
                 </form>
             </div>

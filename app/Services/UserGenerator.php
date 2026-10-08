@@ -69,7 +69,9 @@ class UserGenerator
         $users = [];
         for ($i = 0; $i < $batch->qty; $i++) {
             $username = $this->uniqueUsername($batch->prefix ?? '', $batch->code_length, $batch->charset);
-            $password = $sharedPassword ?? $this->randomCode($batch->code_length, $batch->charset);
+            $password = $batch->password_as_username
+                ? $username
+                : $sharedPassword ?? $this->randomCode($batch->code_length, $batch->charset);
 
             $users[] = $this->generateOne($profile, $username, $password, $batch->id);
         }

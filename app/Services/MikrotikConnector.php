@@ -10,6 +10,7 @@ use App\Models\Profile;
 use App\Models\Router;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Number;
 use RouterOS\Client;
 use RouterOS\Exceptions\BadCredentialsException;
 use RouterOS\Exceptions\ClientException;
@@ -66,6 +67,12 @@ class MikrotikConnector
     ];
 
     private const SHARED_QUEUE_SUFFIX = ' shared';
+
+    /**
+     * Folder on the router (under flash/ when it has one) that holds the
+     * client's hotspot login template.
+     */
+    public const LOGIN_TEMPLATE_DIR = 'nusa-hotspot';
 
     /**
      * Builds the ip-binding comment / simple queue name this class uses
@@ -1337,6 +1344,300 @@ class MikrotikConnector
                 (new Query("{$menu}/unset"))->equal('numbers', $id)->equal('value-name', $field)
             )->read();
         }
+    }
+
+    /**
+     * Push a client's hotspot login template to the router: the router
+     * downloads each file itself with /tool fetch from $baseUrl, then
+     * every hotspot profile attached to a hotspot server is pointed at
+     * that directory. The html-directory each profile had before is
+     * saved on the router record the first time, for
+     * restoreLoginTemplate().
+     *
+     * @param  array<int, string>  $files
+     * @param  int  $bytesNeeded  total size of $files, checked against the router's free storage first
+     * @return array{ok: bool, message: string}
+     */
+    public function applyLoginTemplate(Router $router, array $files, string $baseUrl, int $bytesNeeded = 0): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 20,
+            ]);
+
+            $resource = $client->query(new Query('/system/resource/print'))->read()[0] ?? [];
+
+            if (isset($resource['free-hdd-space']) && (int) $resource['free-hdd-space'] < $bytesNeeded) {
+                return ['ok' => false, 'message' => sprintf(
+                    'Storage router tidak cukup: tersisa %s, template butuh %s. Hapus file yang tidak terpakai di menu Files lalu coba lagi.',
+                    Number::fileSize((int) $resource['free-hdd-space'], 1),
+                    Number::fileSize($bytesNeeded, 1),
+                )];
+            }
+
+            $profiles = $this->activeHotspotProfiles($client);
+
+            if (empty($profiles)) {
+                return ['ok' => false, 'message' => 'Router ini belum punya hotspot server aktif.'];
+            }
+
+            // Routers with a separate flash disk keep only flash/ across
+            // a reboot — follow the existing html-directory there.
+            $onFlash = collect($profiles)->contains(fn ($p) => str_starts_with($p['html-directory'] ?? '', 'flash/'));
+            $dir = ($onFlash ? 'flash/' : '').self::LOGIN_TEMPLATE_DIR;
+
+            foreach ($files as $file) {
+                $words = $client->query(
+                    (new Query('/tool/fetch'))
+                        ->equal('url', rtrim($baseUrl, '/').'/'.$file)
+                        ->equal('dst-path', "{$dir}/{$file}")
+                )->read(false);
+
+                if ($error = $this->fetchError($words)) {
+                    return ['ok' => false, 'message' => "Router gagal mengunduh {$file}: {$error}. Halaman login lama tetap dipakai."];
+                }
+            }
+
+            // Never point the hotspot at the folder unless every file is
+            // really there — an empty html-directory means no login page.
+            if ($missing = $this->missingFiles($client, $dir, $files)) {
+                return ['ok' => false, 'message' => 'File template tidak ditemukan di router setelah diunduh ('.implode(', ', $missing).'). Pastikan router bisa mengakses hotspot.nusa.id, lalu coba lagi. Halaman login lama tetap dipakai.'];
+            }
+
+            $this->removeStaleTemplateFiles($client, $dir, $files);
+
+            $backup = $router->html_directory_backup ?? [];
+
+            foreach ($profiles as $profile) {
+                $current = $profile['html-directory'] ?? '';
+
+                if (! array_key_exists($profile['name'], $backup) && $current !== $dir) {
+                    $backup[$profile['name']] = $current;
+                }
+
+                $client->query(
+                    (new Query('/ip/hotspot/profile/set'))
+                        ->equal('.id', $profile['.id'])
+                        ->equal('html-directory', $dir)
+                )->read();
+            }
+
+            $router->update([
+                'login_template_dir' => $dir,
+                'login_template_applied_at' => now(),
+                'html_directory_backup' => $backup,
+            ]);
+            Cache::forget("mikrotik:storage:{$router->id}");
+
+            return ['ok' => true, 'message' => "Template login diterapkan ke {$router->name}."];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Point each hotspot profile back at the html-directory it had
+     * before applyLoginTemplate(). The template files stay on the router.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function restoreLoginTemplate(Router $router): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+            ]);
+
+            $backup = $router->html_directory_backup ?? [];
+            $profiles = $client->query(new Query('/ip/hotspot/profile/print'))->read();
+
+            foreach ($profiles as $profile) {
+                if ($router->login_template_dir === null || ($profile['html-directory'] ?? '') !== $router->login_template_dir) {
+                    continue;
+                }
+
+                $client->query(
+                    (new Query('/ip/hotspot/profile/set'))
+                        ->equal('.id', $profile['.id'])
+                        ->equal('html-directory', $backup[$profile['name']] ?? 'hotspot')
+                )->read();
+            }
+
+            $router->update([
+                'login_template_dir' => null,
+                'login_template_applied_at' => null,
+                'html_directory_backup' => null,
+            ]);
+
+            return ['ok' => true, 'message' => "Halaman login {$router->name} dikembalikan ke bawaan."];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * The failure reason in a raw /tool/fetch reply, or null when it
+     * finished. A failed download shows up either as a !trap or as a
+     * status=failed reply, depending on the RouterOS version.
+     *
+     * @param  array<int, string>  $words
+     */
+    private function fetchError(array $words): ?string
+    {
+        $status = null;
+        $message = null;
+        $trapped = false;
+
+        foreach ($words as $word) {
+            if ($word === '!trap' || $word === '!fatal') {
+                $trapped = true;
+            } elseif (str_starts_with($word, '=status=')) {
+                $status = substr($word, 8);
+            } elseif (str_starts_with($word, '=message=')) {
+                $message = substr($word, 9);
+            }
+        }
+
+        if ($trapped || $status === 'failed') {
+            return $message ?? 'unduhan gagal';
+        }
+
+        return $status === 'finished' ? null : 'unduhan tidak selesai';
+    }
+
+    /**
+     * Files of $files not (yet) present in $dir on the router. The file
+     * list can lag a moment behind /tool/fetch, so look a few times.
+     *
+     * @param  array<int, string>  $files
+     * @return array<int, string>
+     */
+    private function missingFiles(Client $client, string $dir, array $files): array
+    {
+        for ($try = 0; $try < 4; $try++) {
+            if ($try > 0) {
+                sleep(1);
+            }
+
+            $present = array_column(
+                $client->query((new Query('/file/print'))->equal('.proplist', 'name'))->read(),
+                'name',
+            );
+            $missing = array_values(array_filter($files, fn (string $file) => ! in_array("{$dir}/{$file}", $present, true)));
+
+            if (empty($missing)) {
+                return [];
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Delete files in the template folder that the current template no
+     * longer has — e.g. bg.jpg after the background became bg.png.
+     * Only touches files directly inside $dir. Best-effort: a failure
+     * here never fails the apply.
+     *
+     * @param  array<int, string>  $keep
+     */
+    private function removeStaleTemplateFiles(Client $client, string $dir, array $keep): void
+    {
+        try {
+            $entries = $client->query((new Query('/file/print'))->equal('.proplist', '.id,name,type'))->read();
+
+            foreach ($entries as $entry) {
+                $name = $entry['name'] ?? '';
+
+                if (! str_starts_with($name, "{$dir}/") || ($entry['type'] ?? '') === 'directory') {
+                    continue;
+                }
+
+                $file = substr($name, strlen($dir) + 1);
+
+                if (! str_contains($file, '/') && ! in_array($file, $keep, true)) {
+                    $client->query((new Query('/file/remove'))->equal('.id', $entry['.id']))->read();
+                }
+            }
+        } catch (Throwable) {
+            // Leftover files only cost a little storage.
+        }
+    }
+
+    /**
+     * Free and total storage in bytes, from /system/resource. Cached
+     * briefly; null when the router can't be reached.
+     *
+     * @return array{free: int, total: int}|null
+     */
+    public function storage(Router $router): ?array
+    {
+        if (blank($router->api_host)) {
+            return null;
+        }
+
+        return Cache::remember("mikrotik:storage:{$router->id}", 60, function () use ($router) {
+            try {
+                $client = new Client([
+                    'host' => $router->api_host,
+                    'user' => $router->api_user,
+                    'pass' => $router->api_pass,
+                    'port' => (int) $router->api_port,
+                    'timeout' => 5,
+                ]);
+                $resource = $client->query(new Query('/system/resource/print'))->read()[0] ?? [];
+            } catch (Throwable) {
+                return null;
+            }
+
+            return isset($resource['free-hdd-space'])
+                ? ['free' => (int) $resource['free-hdd-space'], 'total' => (int) ($resource['total-hdd-space'] ?? 0)]
+                : null;
+        });
+    }
+
+    /**
+     * Hotspot server profiles actually attached to a hotspot server.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function activeHotspotProfiles(Client $client): array
+    {
+        $hotspotServers = $client->query(new Query('/ip/hotspot/print'))->read();
+        $activeProfileNames = array_unique(array_filter(array_column($hotspotServers, 'profile')));
+
+        return array_values(array_filter(
+            $client->query(new Query('/ip/hotspot/profile/print'))->read(),
+            fn (array $profile) => in_array($profile['name'] ?? null, $activeProfileNames, true),
+        ));
     }
 
     private function fail(array $steps, string $message): array

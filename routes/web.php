@@ -7,15 +7,23 @@ use App\Http\Controllers\Auth\ClientLoginController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
 use App\Http\Controllers\Client\DeviceController;
 use App\Http\Controllers\Client\HistoryController;
+use App\Http\Controllers\Client\HotspotTemplateController;
 use App\Http\Controllers\Client\ProfileController;
 use App\Http\Controllers\Client\RouterController;
 use App\Http\Controllers\Client\UserController;
+use App\Http\Controllers\Hotspot\TemplateFileController;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'landing')->name('home');
 
 Route::get('/locale/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
+
+// --- Hotspot template files, downloaded by MikroTik /tool fetch ---
+Route::get('/hs-template/{token}/{file}', TemplateFileController::class)
+    ->where(['token' => '[A-Za-z0-9]{40}', 'file' => '[a-z0-9]+\.[a-z0-9]+'])
+    ->middleware('throttle:240,1')
+    ->name('hotspot-template.file');
 
 // --- Client auth (default login) ---
 Route::get('/login', [ClientLoginController::class, 'create'])->name('login');
@@ -59,6 +67,14 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
     Route::post('/users/{hotspotUser}/bypass/{router}/kill', [UserController::class, 'killBypass'])->name('users.bypass.kill');
 
     Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+
+    Route::get('/hotspot-template', [HotspotTemplateController::class, 'edit'])->name('hotspot-template.edit');
+    Route::put('/hotspot-template', [HotspotTemplateController::class, 'update'])->name('hotspot-template.update');
+    Route::get('/hotspot-template/storage', [HotspotTemplateController::class, 'storage'])->name('hotspot-template.storage');
+    Route::get('/hotspot-template/preview/{file}', [HotspotTemplateController::class, 'preview'])
+        ->where('file', '[a-z0-9.]+')->name('hotspot-template.preview');
+    Route::post('/hotspot-template/apply/{router}', [HotspotTemplateController::class, 'apply'])->name('hotspot-template.apply');
+    Route::post('/hotspot-template/restore/{router}', [HotspotTemplateController::class, 'restore'])->name('hotspot-template.restore');
 
     Route::get('/history', [HistoryController::class, 'index'])->name('history.index');
     Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');

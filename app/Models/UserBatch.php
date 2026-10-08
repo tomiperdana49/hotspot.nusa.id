@@ -12,13 +12,14 @@ class UserBatch extends Model
 
     protected $fillable = [
         'client_id', 'profile_id', 'name', 'qty', 'prefix', 'code_length',
-        'charset', 'same_password', 'created_by',
+        'charset', 'same_password', 'password_as_username', 'created_by',
     ];
 
     protected function casts(): array
     {
         return [
             'same_password' => 'boolean',
+            'password_as_username' => 'boolean',
         ];
     }
 

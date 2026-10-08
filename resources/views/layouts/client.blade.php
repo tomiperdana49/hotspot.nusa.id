@@ -17,6 +17,8 @@
              'icon' => '<path d="M2.5 9.5a14 14 0 0119 0" stroke-linecap="round"/><path d="M5.8 13a9.5 9.5 0 0112.4 0" stroke-linecap="round"/><path d="M9 16.3a5 5 0 016 0" stroke-linecap="round"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/>'],
             ['route' => 'client.profiles.index', 'match' => 'client.profiles.*', 'label' => __('app.nav.profile'), 'desc' => __('app.ui.nav_desc.profile'),
              'icon' => '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" stroke-linejoin="round"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" stroke-linejoin="round"/>'],
+            ['route' => 'client.hotspot-template.edit', 'match' => 'client.hotspot-template.*', 'label' => __('app.nav.hotspot_template'), 'desc' => __('app.ui.nav_desc.hotspot_template'),
+             'icon' => '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 8.5h17" stroke-linecap="round"/><rect x="8" y="12" width="8" height="2.2" rx="1.1"/><rect x="8" y="15.8" width="8" height="2.2" rx="1.1"/>'],
             ['route' => 'client.users.index', 'match' => 'client.users.*', 'label' => __('app.nav.user'), 'desc' => __('app.ui.nav_desc.user'),
              'icon' => '<path d="M4 8a2 2 0 012-2h12a2 2 0 012 2v1.5a1.8 1.8 0 000 3.5V14.5a1.8 1.8 0 000 3.5V19a2 2 0 01-2 2H6a2 2 0 01-2-2v-1a1.8 1.8 0 000-3.5V11.5a1.8 1.8 0 000-3.5V8z" stroke-linejoin="round"/><path d="M10 6v14" stroke-dasharray="2 2"/>'],
             ['route' => 'client.devices.index', 'match' => 'client.devices.*', 'label' => __('app.nav.device_online'), 'desc' => __('app.ui.nav_desc.device'),
