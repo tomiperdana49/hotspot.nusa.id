@@ -9,6 +9,7 @@ return [
         'user' => 'User',
         'history' => 'Connection History',
         'hotspot_template' => 'Login Template',
+        'help' => 'Help',
         'device_online' => 'Device Online',
         'logout' => 'Logout',
         'superadmin' => 'Superadmin',
@@ -306,6 +307,7 @@ return [
             'history' => 'Last 90 days log',
             'device' => 'Currently connected',
             'hotspot_template' => 'Hotspot login page design',
+            'help' => 'How to use the system',
         ],
         'dashboard' => [
             'subtitle' => 'Here is your hotspot overview for today.',
@@ -532,5 +534,22 @@ return [
         'logged_out' => 'You have logged out.',
         'login_again' => 'Log in again',
         'back' => 'Back',
+    ],
+
+    'help' => [
+        'title' => 'Help',
+        'subtitle' => 'How to use Nusa Hotspot, from connecting a router to fixing problems.',
+        'search' => 'Search the guide...',
+        'no_result' => 'Nothing in the guide matches your search.',
+        'toc' => [
+            'start' => 'Getting started',
+            'router' => 'Router',
+            'profile' => 'Plans / Profiles',
+            'user' => 'Users / Vouchers',
+            'template' => 'Login Template',
+            'devices' => 'Device Online',
+            'history' => 'Connection History',
+            'faq' => 'FAQ & troubleshooting',
+        ],
     ],
 ];

@@ -25,6 +25,8 @@
              'icon' => '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4" stroke-linecap="round"/>'],
             ['route' => 'client.history.index', 'match' => 'client.history.*', 'label' => __('app.nav.history'), 'desc' => __('app.ui.nav_desc.history'),
              'icon' => '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2" stroke-linecap="round" stroke-linejoin="round"/>'],
+            ['route' => 'client.help', 'match' => 'client.help', 'label' => __('app.nav.help'), 'desc' => __('app.ui.nav_desc.help'),
+             'icon' => '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'],
         ];
         $clientName = auth('client')->check() ? auth('client')->user()->client->name : null;
     @endphp

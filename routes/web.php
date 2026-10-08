@@ -76,6 +76,8 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
     Route::post('/hotspot-template/apply/{router}', [HotspotTemplateController::class, 'apply'])->name('hotspot-template.apply');
     Route::post('/hotspot-template/restore/{router}', [HotspotTemplateController::class, 'restore'])->name('hotspot-template.restore');
 
+    Route::view('/help', 'client.help.index')->name('help');
+
     Route::get('/history', [HistoryController::class, 'index'])->name('history.index');
     Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');
 });

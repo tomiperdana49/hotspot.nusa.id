@@ -10,6 +10,7 @@ return [
         'history' => 'Riwayat Koneksi',
         'device_online' => 'Device Online',
         'hotspot_template' => 'Template Login',
+        'help' => 'Bantuan',
         'logout' => 'Logout',
         'superadmin' => 'Superadmin',
     ],
@@ -306,6 +307,7 @@ return [
             'history' => 'Log 90 hari terakhir',
             'device' => 'Yang sedang terkoneksi',
             'hotspot_template' => 'Tampilan halaman login',
+            'help' => 'Panduan penggunaan',
         ],
         'dashboard' => [
             'subtitle' => 'Ini ringkasan hotspot Anda hari ini.',
@@ -532,5 +534,22 @@ return [
         'logged_out' => 'Anda sudah logout.',
         'login_again' => 'Login lagi',
         'back' => 'Kembali',
+    ],
+
+    'help' => [
+        'title' => 'Bantuan',
+        'subtitle' => 'Panduan memakai Nusa Hotspot, dari menghubungkan router sampai mengatasi masalah.',
+        'search' => 'Cari panduan...',
+        'no_result' => 'Tidak ada panduan yang cocok dengan pencarian.',
+        'toc' => [
+            'start' => 'Memulai',
+            'router' => 'Router',
+            'profile' => 'Paket / Profile',
+            'user' => 'User / Voucher',
+            'template' => 'Template Login',
+            'devices' => 'Device Online',
+            'history' => 'Riwayat Koneksi',
+            'faq' => 'FAQ & solusi masalah',
+        ],
     ],
 ];
