@@ -44,7 +44,7 @@
                         <label class="label">{{ __('app.user_index.col_profile') }}</label>
                         <select name="profile_id" required class="select">
                             @foreach ($profiles as $profile)
-                                <option value="{{ $profile->id }}">{{ $profile->name }}@if ($profile->rate_down) — {{ $profile->rate_up ?? '-' }}/{{ $profile->rate_down }}@endif</option>
+                                <option value="{{ $profile->id }}">{{ $profile->name }}@if ($profile->rate_down) — {{ $profile->rate_up ?? '-' }}/{{ $profile->rate_down }}@endif · {{ $profile->router_label }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -82,7 +82,7 @@
                             <label class="label">{{ __('app.user_index.col_profile') }}</label>
                             <select name="profile_id" required class="select">
                                 @foreach ($profiles as $profile)
-                                    <option value="{{ $profile->id }}">{{ $profile->name }}@if ($profile->rate_down) — {{ $profile->rate_up ?? '-' }}/{{ $profile->rate_down }}@endif</option>
+                                    <option value="{{ $profile->id }}">{{ $profile->name }}@if ($profile->rate_down) — {{ $profile->rate_up ?? '-' }}/{{ $profile->rate_down }}@endif · {{ $profile->router_label }}</option>
                                 @endforeach
                             </select>
                         </div>

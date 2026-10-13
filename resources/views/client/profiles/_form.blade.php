@@ -13,6 +13,41 @@
         </div>
     </section>
 
+    {{-- Routers --}}
+    <section class="p-6 grid md:grid-cols-3 gap-4 md:gap-6">
+        <div>
+            <h2 class="section-title">{{ __('app.profile_form.section_routers') }}</h2>
+            <p class="section-desc">{{ __('app.profile_form.section_routers_desc') }}</p>
+        </div>
+        <div class="md:col-span-2 space-y-3">
+            @php
+                $scope = old('router_scope', $p?->router_scope ?? 'all');
+                $picked = array_map('intval', old('router_ids', $p?->routers->pluck('id')->all() ?? []));
+            @endphp
+            <div class="grid sm:grid-cols-2 gap-3">
+                @foreach (['all' => 'scope_all', 'selected' => 'scope_selected'] as $val => $labelKey)
+                    <label class="relative flex gap-3 rounded-xl border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60 has-[:checked]:ring-1 has-[:checked]:ring-brand-600">
+                        <input type="radio" name="router_scope" value="{{ $val }}" @checked($scope === $val) class="mt-0.5 border-gray-300 text-brand-600 focus:ring-brand-500" data-router-scope>
+                        <span>
+                            <span class="block text-sm font-medium text-gray-900">{{ __('app.profile_form.'.$labelKey) }}</span>
+                            <span class="block text-xs text-gray-500 mt-0.5">{{ __('app.profile_form.'.$labelKey.'_desc') }}</span>
+                        </span>
+                    </label>
+                @endforeach
+            </div>
+            <div id="routerPicker" class="rounded-xl border border-gray-200 p-3.5 space-y-2 {{ $scope === 'selected' ? '' : 'hidden' }}">
+                @forelse ($routers as $router)
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="router_ids[]" value="{{ $router->id }}" @checked(in_array($router->id, $picked, true)) class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+                        {{ $router->name }}
+                    </label>
+                @empty
+                    <p class="text-sm text-gray-400">{{ __('app.profile_form.no_routers') }}</p>
+                @endforelse
+            </div>
+        </div>
+    </section>
+
     {{-- Connection --}}
     <section class="p-6 grid md:grid-cols-3 gap-4 md:gap-6">
         <div>
@@ -190,6 +225,9 @@
             document.getElementById('pfValidity').textContent = '⏱ ' + (vv && vu ? `${vv} ${t.units[vu]}` : t.unlimited);
             document.getElementById('pfDevices').textContent = '📱 ' + t.devices.replace(':n', f('su').value || 1);
         }
+        document.querySelectorAll('[data-router-scope]').forEach((el) => el.addEventListener('change', () => {
+            document.getElementById('routerPicker').classList.toggle('hidden', el.value !== 'selected' || ! el.checked);
+        }));
         document.querySelectorAll('[data-pf]').forEach((el) => { el.addEventListener('input', render); el.addEventListener('change', render); });
         render();
     })();

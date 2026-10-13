@@ -35,24 +35,31 @@ class UserController extends Controller
     public function index(Request $request)
     {
         $clientId = Auth::guard('client')->user()->client_id;
+        $routers = Router::where('client_id', $clientId)->orderBy('name')->get();
+        $selectedRouter = $routers->firstWhere('id', (int) $request->input('router'));
 
-        $users = HotspotUser::with('profile')
+        // A router filter shows the users who can log in there: their
+        // profile covers every router, or that router is ticked on it.
+        $users = HotspotUser::with('profile.routers:id,name')
             ->where('client_id', $clientId)
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+            ->when($selectedRouter, fn ($q) => $q->whereHas('profile', fn ($p) => $p->where(fn ($w) => $w
+                ->where('router_scope', 'all')
+                ->orWhereHas('routers', fn ($r) => $r->whereKey($selectedRouter->id)))))
             ->latest()
             ->get();
 
         $onlineCounts = $this->onlineDevices
-            ->forUsers($users->keyBy('username'), Router::where('client_id', $clientId)->get())
+            ->forUsers($users->keyBy('username'), $selectedRouter ? collect([$selectedRouter]) : $routers)
             ->countBy('username');
 
-        return view('client.users.index', compact('users', 'onlineCounts'));
+        return view('client.users.index', compact('users', 'onlineCounts', 'routers', 'selectedRouter'));
     }
 
     public function create()
     {
         $clientId = Auth::guard('client')->user()->client_id;
-        $profiles = Profile::where('client_id', $clientId)->where('is_active', true)->get();
+        $profiles = Profile::where('client_id', $clientId)->where('is_active', true)->with('routers:id,name')->get();
 
         return view('client.users.create', compact('profiles'));
     }
@@ -126,7 +133,7 @@ class UserController extends Controller
     {
         $this->authorizeUser($hotspotUser);
 
-        $profiles = Profile::where('client_id', $hotspotUser->client_id)->where('is_active', true)->get();
+        $profiles = Profile::where('client_id', $hotspotUser->client_id)->where('is_active', true)->with('routers:id,name')->get();
 
         return view('client.users.edit', ['user' => $hotspotUser, 'profiles' => $profiles]);
     }

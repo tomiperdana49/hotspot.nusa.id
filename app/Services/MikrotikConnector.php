@@ -75,6 +75,24 @@ class MikrotikConnector
     public const LOGIN_TEMPLATE_DIR = 'nusa-hotspot';
 
     /**
+     * Comment prefix on the firewall rules syncBlockedSites() manages,
+     * also the name of their filter chain and (with "-hotspot") of the
+     * interface list holding the hotspot interfaces they apply to.
+     */
+    private const BLOCK_TAG = 'nusa-block';
+
+    /**
+     * Public resolvers reached over DNS-over-HTTPS, refused from the hotspot
+     * while sites are blocked so a phone can't look a domain up past the
+     * router. Plain DNS to them is redirected to the router anyway.
+     */
+    private const PUBLIC_RESOLVERS = [
+        '8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9', '149.112.112.112',
+        '208.67.222.222', '208.67.220.220', '94.140.14.14', '94.140.15.15',
+        '185.228.168.9', '185.228.169.9', '76.76.2.0', '76.76.10.0', '45.90.28.0', '45.90.30.0',
+    ];
+
+    /**
      * Builds the ip-binding comment / simple queue name this class uses
      * to tag entries it manages: "{username}-{expires_at Y-m-d H:i}" (or
      * "-no-expiry" for a voucher with no set expiry), so an admin can
@@ -560,15 +578,19 @@ class MikrotikConnector
             $active = $client->query(new Query('/ip/hotspot/active/print'))->read();
 
             $boundByMac = [];
-            $boundCount = [];
+            $boundMacs = [];
             foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
                 $mac = strtoupper($binding['mac-address'] ?? '');
                 $bindingUser = $this->usernameFromTag($binding['comment'] ?? '');
                 if ($mac && $bindingUser !== null) {
                     $boundByMac[$mac] = $binding;
-                    $boundCount[$bindingUser] = ($boundCount[$bindingUser] ?? 0) + 1;
+                    $boundMacs[$bindingUser][$mac] = true;
                 }
             }
+
+            // Devices the same vouchers have bound on the client's other
+            // routers, so the Shared limit holds across all of them.
+            $boundElsewhere = $this->boundMacsOnOtherRouters($router);
 
             $queueByMac = [];
             $legacyQueues = [];
@@ -587,10 +609,12 @@ class MikrotikConnector
 
             $usernames = array_unique(array_merge(
                 array_filter(array_column($active, 'user')),
-                array_keys($boundCount),
+                array_keys($boundMacs),
             ));
 
             if (empty($usernames)) {
+                Cache::forever("mikrotik:bound-macs:{$router->id}", []);
+
                 // Still drop shared parents left behind by the last device
                 // going away, or they would linger until someone logs in.
                 $this->syncSharedQueues($client, collect());
@@ -629,11 +653,14 @@ class MikrotikConnector
                 if (! $existingBinding) {
                     // A bypassed device has no open RADIUS session, so
                     // RADIUS Simultaneous-Use can't see it — enforce the
-                    // profile's Shared limit here instead, counting bound
-                    // devices. Over the limit: drop this login rather
-                    // than bind it.
+                    // profile's Shared limit here instead, counting the
+                    // devices bound on every router of this client. A
+                    // device already bound on another router is the same
+                    // device roaming, not a new one. Over the limit: drop
+                    // this login rather than bind it.
                     $limit = (int) ($user->profile?->simultaneous_use ?? 0);
-                    if ($limit > 0 && ($boundCount[$username] ?? 0) >= $limit) {
+                    $devices = ($boundMacs[$username] ?? []) + ($boundElsewhere[$username] ?? []);
+                    if ($limit > 0 && ! isset($devices[$mac]) && count($devices) >= $limit) {
                         if (isset($session['.id'])) {
                             $client->query((new Query('/ip/hotspot/active/remove'))->equal('.id', $session['.id']))->read();
                         }
@@ -641,7 +668,7 @@ class MikrotikConnector
                         continue;
                     }
 
-                    $boundCount[$username] = ($boundCount[$username] ?? 0) + 1;
+                    $boundMacs[$username][$mac] = true;
                     Cache::forget("mikrotik:bypassed-hosts:{$router->id}");
 
                     $client->query(
@@ -784,6 +811,14 @@ class MikrotikConnector
                 $this->unbindUsers($router, array_keys($staleUsernames));
             }
 
+            // Read by the client's other routers on their next sync. Kept
+            // until overwritten: a router that goes unreachable still has
+            // those devices bound, so they keep counting.
+            Cache::forever(
+                "mikrotik:bound-macs:{$router->id}",
+                array_map('array_keys', array_diff_key($boundMacs, $staleUsernames)),
+            );
+
             $this->syncSharedQueues($client, $users);
             $this->keepQueuesOnTop($client);
 
@@ -797,6 +832,30 @@ class MikrotikConnector
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
         }
+    }
+
+    /**
+     * MACs each voucher has bound on the client's other routers, as last
+     * seen by their own syncActiveBindings() run.
+     *
+     * @return array<string, array<string, true>>
+     */
+    private function boundMacsOnOtherRouters(Router $router): array
+    {
+        $otherIds = Router::where('client_id', $router->client_id)
+            ->where('id', '!=', $router->id)
+            ->pluck('id');
+
+        $macs = [];
+        foreach ($otherIds as $id) {
+            foreach (Cache::get("mikrotik:bound-macs:{$id}", []) as $username => $list) {
+                foreach ($list as $mac) {
+                    $macs[$username][$mac] = true;
+                }
+            }
+        }
+
+        return $macs;
     }
 
     /**
@@ -1268,6 +1327,378 @@ class MikrotikConnector
             return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Undo what this system put on a router that is being removed from
+     * the panel: the bypass bindings and queues (or those devices would
+     * keep free access for good), the login template, and the RADIUS
+     * entry. The radius-nusa profiles stay; they do nothing on their own.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function releaseRouter(Router $router): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => true, 'message' => 'Router belum pernah terhubung.'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+                'attempts' => 1,
+            ]);
+
+            $usernames = [];
+            foreach ($client->query(new Query('/ip/hotspot/ip-binding/print'))->read() as $binding) {
+                if (($username = $this->usernameFromTag($binding['comment'] ?? '')) !== null) {
+                    $usernames[$username] = true;
+                }
+            }
+            foreach ($client->query(new Query('/queue/simple/print'))->read() as $queue) {
+                $name = $queue['name'] ?? '';
+                if (($username = $this->usernameFromSharedQueueName($name) ?? $this->parseQueueName($name)[0] ?? null) !== null) {
+                    $usernames[$username] = true;
+                }
+            }
+
+            if ($usernames !== []) {
+                $unbound = $this->unbindUsers($router, array_keys($usernames));
+                if (! $unbound['ok']) {
+                    return $unbound;
+                }
+            }
+
+            if ($router->login_template_dir !== null) {
+                $restored = $this->restoreLoginTemplate($router);
+                if (! $restored['ok']) {
+                    return $restored;
+                }
+            }
+
+            $this->applyBlockedSites($client, []);
+
+            foreach ($client->query((new Query('/radius/print'))->where('comment', 'nusa-hotspot'))->read() as $row) {
+                if (isset($row['.id'])) {
+                    $client->query((new Query('/radius/remove'))->equal('.id', $row['.id']))->read();
+                }
+            }
+
+            return ['ok' => true, 'message' => 'Konfigurasi Nusa di router sudah dibersihkan.'];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Gagal terhubung ke router: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Push the router's blocked-site list to it. Logged-in devices ride an
+     * ip-binding bypass, so the hotspot walled garden never sees them.
+     * The main block is DNS: queries from the hotspot interfaces are
+     * redirected to the router, which answers 127.0.0.1 for a blocked domain
+     * and its subdomains; DNS-over-TLS and DoH to the well-known public
+     * resolvers are refused so a device can't route around it. Firewall
+     * rules on the TLS server name and the HTTP Host header stay as a
+     * second layer, though tls-host misses a TLS hello split over two
+     * packets, which current browsers send.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function syncBlockedSites(Router $router): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        $domains = $router->blockedSites()->orderBy('domain')->pluck('domain')->all();
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+                'attempts' => 1,
+            ]);
+
+            $warning = $this->applyBlockedSites($client, $domains);
+
+            $message = $domains === []
+                ? 'Aturan blokir dihapus dari router.'
+                : count($domains).' website diblokir di router. Device yang sudah terhubung mungkin perlu menyambung ulang WiFi agar blokir berlaku.';
+
+            return ['ok' => true, 'message' => trim($message.' '.$warning)];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Make the router's nusa-block entries match $domains: entries already
+     * in place stay, missing ones are added, the rest removed. An empty
+     * list removes all of them and puts the DNS setting back. Returns a
+     * warning to show the client, or an empty string.
+     *
+     * @param  array<int, string>  $domains
+     */
+    private function applyBlockedSites(Client $client, array $domains): string
+    {
+        $tag = self::BLOCK_TAG;
+        $interfaceList = $tag.'-hotspot';
+        $resolverList = $tag.'-resolvers';
+        $rules = $client->query(new Query('/ip/firewall/filter/print'))->read();
+
+        // The guard rule only exists when this class turned on remote DNS
+        // requests, so it doubles as the note to turn them off again.
+        $guardExisted = in_array("{$tag}:dns-guard", array_column($rules, 'comment'), true);
+
+        $filter = [];
+        $nat = [];
+        $static = [];
+        $resolvers = [];
+
+        if ($domains !== []) {
+            $hotspotInterfaces = array_values(array_unique(array_filter(array_column(
+                $client->query(new Query('/ip/hotspot/print'))->read(), 'interface'
+            ))));
+
+            if ($hotspotInterfaces === []) {
+                throw new \RuntimeException('Router ini belum punya hotspot server, jadi tidak ada jaringan yang bisa diblokir.');
+            }
+
+            $this->syncInterfaceList($client, $interfaceList, $hotspotInterfaces);
+
+            $dns = $client->query(new Query('/ip/dns/print'))->read()[0] ?? [];
+            $needsGuard = $guardExisted || ($dns['allow-remote-requests'] ?? 'false') !== 'true';
+
+            $fromHotspot = ['in-interface-list' => $interfaceList];
+            foreach (['udp', 'tcp'] as $protocol) {
+                $nat["{$tag}:dns-{$protocol}"] = ['chain' => 'dstnat', 'action' => 'redirect', 'to-ports' => '53', 'protocol' => $protocol, 'dst-port' => '53'] + $fromHotspot;
+
+                if ($needsGuard) {
+                    // Remote requests are for the hotspot only, never an
+                    // open resolver on the WAN.
+                    $filter["{$tag}:dns-guard".($protocol === 'tcp' ? '-tcp' : '')] = [
+                        'chain' => 'input', 'action' => 'drop', 'protocol' => $protocol, 'dst-port' => '53',
+                        'in-interface-list' => "!{$interfaceList}",
+                    ];
+                }
+            }
+
+            $filter["{$tag}:dot"] = ['chain' => 'forward', 'action' => 'reject', 'reject-with' => 'tcp-reset', 'protocol' => 'tcp', 'dst-port' => '853'] + $fromHotspot;
+            $filter["{$tag}:doh"] = ['chain' => 'forward', 'action' => 'reject', 'reject-with' => 'icmp-port-unreachable', 'dst-address-list' => $resolverList] + $fromHotspot;
+            foreach (self::PUBLIC_RESOLVERS as $address) {
+                $resolvers["{$tag}:{$address}"] = ['list' => $resolverList, 'address' => $address];
+            }
+
+            // Second layer: the two entry rules sit in forward, the
+            // per-domain ones in their own chain so other traffic skips them.
+            $filter[$tag] = ['chain' => 'forward', 'action' => 'jump', 'jump-target' => $tag, 'protocol' => 'tcp', 'dst-port' => '80,443'] + $fromHotspot;
+            $filter["{$tag}:quic"] = ['chain' => 'forward', 'action' => 'reject', 'reject-with' => 'icmp-port-unreachable', 'protocol' => 'udp', 'dst-port' => '443'] + $fromHotspot;
+
+            foreach ($domains as $domain) {
+                $static["{$tag}:{$domain}"] = ['regexp' => '^(.*\\.)?'.str_replace('.', '\\.', $domain).'$', 'address' => '127.0.0.1', 'ttl' => '1m'];
+
+                $reject = ['chain' => $tag, 'action' => 'reject', 'reject-with' => 'tcp-reset', 'protocol' => 'tcp'];
+                $filter["{$tag}:{$domain}:tls"] = $reject + ['dst-port' => '443', 'tls-host' => $domain];
+                $filter["{$tag}:{$domain}:tls-sub"] = $reject + ['dst-port' => '443', 'tls-host' => "*.{$domain}"];
+                $filter["{$tag}:{$domain}:http"] = $reject + ['dst-port' => '80', 'layer7-protocol' => "{$tag}:{$domain}"];
+            }
+        }
+
+        // When the list empties, remote requests go off while the guard
+        // still stands, so the resolver is never open in between.
+        if ($domains === [] && $guardExisted) {
+            $client->query((new Query('/ip/dns/set'))->equal('allow-remote-requests', 'no'))->read();
+        }
+
+        // What the rules refer to is added first and pruned last, once the
+        // rules that used the old entries are gone.
+        $this->syncTaggedEntries($client, '/ip/firewall/address-list', $resolvers, $resolverList, removeStale: false);
+        $this->syncLayer7Hosts($client, $domains, removeStale: false);
+        $this->syncTaggedEntries($client, '/ip/firewall/filter', $filter, rows: $rules);
+        $this->syncTaggedEntries($client, '/ip/firewall/nat', $nat);
+        $this->syncTaggedEntries($client, '/ip/dns/static', $static);
+        $this->syncLayer7Hosts($client, $domains);
+        $this->syncTaggedEntries($client, '/ip/firewall/address-list', $resolvers, $resolverList);
+
+        if ($domains === []) {
+            $this->syncInterfaceList($client, $interfaceList, []);
+        } elseif (($dns['allow-remote-requests'] ?? 'false') !== 'true') {
+            $client->query((new Query('/ip/dns/set'))->equal('allow-remote-requests', 'yes'))->read();
+        }
+
+        $client->query(new Query('/ip/dns/cache/flush'))->read();
+
+        if ($domains === []) {
+            return '';
+        }
+
+        foreach ($rules as $rule) {
+            if (($rule['action'] ?? '') === 'fasttrack-connection' && ($rule['disabled'] ?? 'false') !== 'true') {
+                return 'Perhatian: router memakai FastTrack, sebaiknya rule fasttrack-connection dinonaktifkan.';
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Make the entries under $menu whose comment carries the nusa-block tag
+     * match $wanted (keyed by comment). Entries already there are kept as
+     * they are. New forward, input and dstnat rules go above the first
+     * static rule, so an "accept" rule an admin added can't let the traffic
+     * past first. $list limits an address-list menu to one list.
+     *
+     * @param  array<string, array<string, string>>  $wanted
+     * @param  array<int, array<string, string>>|null  $rows  a print of $menu already read
+     */
+    private function syncTaggedEntries(Client $client, string $menu, array $wanted, ?string $list = null, ?array $rows = null, bool $removeStale = true): void
+    {
+        $tag = self::BLOCK_TAG;
+        $rows ??= $client->query(new Query("{$menu}/print"))->read();
+        $ours = fn (array $row) => (($row['comment'] ?? '') === $tag || str_starts_with($row['comment'] ?? '', "{$tag}:"))
+            && ($list === null || ($row['list'] ?? null) === $list);
+
+        $kept = [];
+        foreach ($rows as $row) {
+            if (! $ours($row)) {
+                continue;
+            }
+
+            $comment = $row['comment'];
+            if (isset($wanted[$comment]) && ! isset($kept[$comment])) {
+                $kept[$comment] = true;
+            } elseif ($removeStale && isset($row['.id'])) {
+                $client->query((new Query("{$menu}/remove"))->equal('.id', $row['.id']))->read();
+            }
+        }
+
+        $anchor = null;
+        foreach ($rows as $row) {
+            if (isset($row['chain']) && ($row['dynamic'] ?? 'false') !== 'true' && ! $ours($row)) {
+                $anchor = $row['.id'] ?? null;
+                break;
+            }
+        }
+
+        foreach ($wanted as $comment => $attributes) {
+            if (isset($kept[$comment])) {
+                continue;
+            }
+
+            $query = (new Query("{$menu}/add"))->equal('comment', $comment);
+            foreach ($attributes as $key => $value) {
+                $query->equal($key, $value);
+            }
+            if ($anchor !== null && in_array($attributes['chain'] ?? null, ['forward', 'input', 'dstnat'], true)) {
+                $query->equal('place-before', $anchor);
+            }
+            $this->mustSucceed($client->query($query)->read(), "{$menu} {$comment}");
+        }
+    }
+
+    /**
+     * The API library hands a "failure: ..." reply back as data instead of
+     * throwing, so an add the router refused would otherwise pass silently.
+     */
+    private function mustSucceed(array $response, string $what): void
+    {
+        if (isset($response['after']['message'])) {
+            throw new \RuntimeException("Router menolak {$what}: {$response['after']['message']}");
+        }
+    }
+
+    /**
+     * One layer7 pattern per blocked domain, matching an HTTP Host header
+     * for the domain or any subdomain. A plain "content" match can't do
+     * that: RouterOS trims the line break that would end the name.
+     *
+     * @param  array<int, string>  $domains
+     */
+    private function syncLayer7Hosts(Client $client, array $domains, bool $removeStale = true): void
+    {
+        $prefix = self::BLOCK_TAG.':';
+        $wanted = [];
+        foreach ($domains as $domain) {
+            $wanted[$prefix.$domain] = 'host: *([-a-z0-9]+\\.)*'.str_replace('.', '\\.', $domain).'(:[0-9]+)?[\\x0d\\x0a]';
+        }
+
+        foreach ($client->query(new Query('/ip/firewall/layer7-protocol/print'))->read() as $row) {
+            $name = $row['name'] ?? '';
+            if (! str_starts_with($name, $prefix)) {
+                continue;
+            }
+
+            if (isset($wanted[$name]) && ($row['regexp'] ?? null) === $wanted[$name]) {
+                unset($wanted[$name]);
+            } elseif (isset($wanted[$name])) {
+                $client->query((new Query('/ip/firewall/layer7-protocol/set'))->equal('.id', $row['.id'])->equal('regexp', $wanted[$name]))->read();
+                unset($wanted[$name]);
+            } elseif ($removeStale && isset($row['.id'])) {
+                $client->query((new Query('/ip/firewall/layer7-protocol/remove'))->equal('.id', $row['.id']))->read();
+            }
+        }
+
+        foreach ($wanted as $name => $regexp) {
+            $this->mustSucceed($client->query((new Query('/ip/firewall/layer7-protocol/add'))->equal('name', $name)->equal('regexp', $regexp))->read(), "layer7 {$name}");
+        }
+    }
+
+    /**
+     * Keep interface list $name holding exactly $interfaces; an empty
+     * $interfaces removes the list itself.
+     *
+     * @param  array<int, string>  $interfaces
+     */
+    private function syncInterfaceList(Client $client, string $name, array $interfaces): void
+    {
+        $present = [];
+        foreach ($client->query((new Query('/interface/list/member/print'))->where('list', $name))->read() as $member) {
+            if (in_array($member['interface'] ?? null, $interfaces, true)) {
+                $present[$member['interface']] = true;
+            } elseif (isset($member['.id'])) {
+                $client->query((new Query('/interface/list/member/remove'))->equal('.id', $member['.id']))->read();
+            }
+        }
+
+        $lists = $client->query((new Query('/interface/list/print'))->where('name', $name))->read();
+
+        if ($interfaces === []) {
+            foreach ($lists as $list) {
+                if (isset($list['.id'])) {
+                    $client->query((new Query('/interface/list/remove'))->equal('.id', $list['.id']))->read();
+                }
+            }
+
+            return;
+        }
+
+        if ($lists === []) {
+            $client->query((new Query('/interface/list/add'))->equal('name', $name)->equal('comment', 'Nusa Hotspot: blokir website'))->read();
+        }
+
+        foreach ($interfaces as $interface) {
+            if (! isset($present[$interface])) {
+                $client->query((new Query('/interface/list/member/add'))->equal('list', $name)->equal('interface', $interface))->read();
+            }
         }
     }
 

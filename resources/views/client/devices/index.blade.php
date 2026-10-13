@@ -11,10 +11,13 @@
             </h1>
             <p class="page-subtitle">{{ __('app.device_index.subtitle') }}</p>
         </div>
-        <a href="{{ route('client.devices.index') }}" class="btn-secondary self-start sm:self-auto">
+        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+        @include('client.partials.router-filter')
+        <a href="{{ route('client.devices.index', array_filter(['router' => request('router')])) }}" class="btn-secondary">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             {{ __('app.ui.devices.refresh') }}
         </a>
+        </div>
     </div>
 
     <div class="info-box mb-4">

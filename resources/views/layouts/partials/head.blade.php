@@ -4,20 +4,30 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
     tailwind.config = {
         theme: {
             extend: {
-                fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
-                colors: { brand: { 50:'{{ $brand[0] }}',100:'{{ $brand[1] }}',500:'{{ $brand[2] }}',600:'{{ $brand[3] }}',700:'{{ $brand[4] }}' } },
+                fontFamily: {
+                    sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+                    mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+                },
+                colors: {
+                    brand: { 50:'{{ $brand[0] }}',100:'{{ $brand[1] }}',500:'{{ $brand[2] }}',600:'{{ $brand[3] }}',700:'{{ $brand[4] }}' },
+                    // Neutrals with a slight green bias, so greys sit with the brand colour.
+                    gray: { 50:'#f4f7f5',100:'#eaf0ec',200:'#dde6e1',300:'#c6d2cb',400:'#8a9a92',500:'#5e6f67',600:'#475850',700:'#34433c',800:'#212e28',900:'#14211b',950:'#0b1410' },
+                },
             },
         },
     };
 </script>
 <style type="text/tailwindcss">
-    @layer base { body { font-feature-settings: "cv02","cv03","cv04","cv11"; } }
+    @layer base {
+        body { font-variant-numeric: tabular-nums; }
+        h1, h2, h3 { text-wrap: balance; }
+    }
     @layer components {
         .input, .select { @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none disabled:bg-gray-50 disabled:text-gray-500; }
         .label { @apply block text-sm font-medium text-gray-700 mb-1.5; }
@@ -31,11 +41,11 @@
         .btn-sm-edit { @apply btn-sm border border-gray-300 text-gray-700 bg-white hover:bg-gray-50; }
         .btn-sm-danger { @apply btn-sm border border-red-200 text-red-600 bg-white hover:bg-red-50; }
         .btn-danger-ghost { @apply text-red-600 hover:text-red-700 text-sm font-medium; }
-        .card { @apply bg-white rounded-2xl border border-gray-200/80 shadow-sm; }
+        .card { @apply bg-white rounded-xl border border-gray-200; box-shadow: 0 1px 2px rgba(20, 33, 27, .05), 0 4px 16px rgba(20, 33, 27, .04); }
         .card-header { @apply px-6 py-4 border-b border-gray-100; }
         .badge { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap; }
         .dot { @apply w-1.5 h-1.5 rounded-full; }
-        .page-title { @apply text-2xl font-bold tracking-tight text-gray-900; }
+        .page-title { @apply text-2xl font-extrabold tracking-tight text-gray-900; }
         .page-subtitle { @apply text-sm text-gray-500 mt-1; }
         .info-box { @apply flex gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900; }
         .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition; }
@@ -76,7 +86,7 @@
     }
     .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { color: #9ca3af !important; cursor: default; }
     table.dataTable { border-collapse: collapse !important; }
-    table.dataTable thead th { position: relative; border-bottom: 1px solid #e5e7eb !important; }
+    table.dataTable thead th { position: relative; border-bottom: 1px solid #dde6e1 !important; }
     table.dataTable.no-footer { border-bottom: 1px solid #f3f4f6 !important; }
     table.dataTable tbody td.dataTables_empty { padding: 2.5rem 1rem; color: #9ca3af; text-align: center; }
     @media (max-width: 640px) {

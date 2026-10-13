@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Router extends Model
 {
@@ -39,6 +40,11 @@ class Router extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function blockedSites(): HasMany
+    {
+        return $this->hasMany(RouterBlockedSite::class);
     }
 
     protected function isOnline(): Attribute

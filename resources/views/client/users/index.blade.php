@@ -25,17 +25,18 @@
     </div>
 
     {{-- Status filter tabs --}}
-    <div class="flex flex-wrap gap-2 mb-4">
-        <a href="{{ route('client.users.index') }}" class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ ! $currentStatus ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+        <a href="{{ route('client.users.index', array_filter(['router' => request('router')])) }}" class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ ! $currentStatus ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
             {{ __('app.ui.all') }}
         </a>
         @foreach ($statusMeta as $key => $meta)
-            <a href="{{ route('client.users.index', ['status' => $key]) }}" title="{{ __('app.ui.user_status.'.$key.'_desc') }}" class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ $currentStatus === $key ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
+            <a href="{{ route('client.users.index', array_filter(['status' => $key, 'router' => request('router')])) }}" title="{{ __('app.ui.user_status.'.$key.'_desc') }}" class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ $currentStatus === $key ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
                 <span class="dot {{ $meta['dot'] }}"></span>
                 {{ __('app.ui.user_status.'.$key) }}
                 <span class="hidden md:inline text-xs {{ $currentStatus === $key ? 'text-white/60' : 'text-gray-400' }}">— {{ __('app.ui.user_status.'.$key.'_desc') }}</span>
             </a>
         @endforeach
+        <div class="sm:ml-auto">@include('client.partials.router-filter')</div>
     </div>
 
     <div class="info-box mb-4">
@@ -85,6 +86,11 @@
                                 <div>{{ $user->profile->name ?? '-' }}</div>
                                 @if ($user->profile)
                                     <div class="text-xs text-gray-400">{{ $user->profile->rate_up ?? '-' }} / {{ $user->profile->rate_down ?? '-' }}</div>
+                                    @if ($routers->count() > 1 || $user->profile->router_scope !== 'all')
+                                        <div class="text-xs text-gray-400">
+                                            {{ $user->profile->router_scope === 'all' ? __('app.router_filter.all') : ($user->profile->routers->pluck('name')->join(', ') ?: __('app.profile_index.no_routers')) }}
+                                        </div>
+                                    @endif
                                 @endif
                             </td>
                             <td class="px-4 py-3.5">

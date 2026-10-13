@@ -25,6 +25,8 @@
              'icon' => '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4" stroke-linecap="round"/>'],
             ['route' => 'client.history.index', 'match' => 'client.history.*', 'label' => __('app.nav.history'), 'desc' => __('app.ui.nav_desc.history'),
              'icon' => '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2" stroke-linecap="round" stroke-linejoin="round"/>'],
+            ['route' => 'client.login-test', 'match' => 'client.login-test', 'label' => __('app.nav.login_test'), 'desc' => __('app.ui.nav_desc.login_test'),
+             'icon' => '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>'],
             ['route' => 'client.help', 'match' => 'client.help', 'label' => __('app.nav.help'), 'desc' => __('app.ui.nav_desc.help'),
              'icon' => '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'],
         ];

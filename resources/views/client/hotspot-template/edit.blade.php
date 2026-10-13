@@ -8,9 +8,62 @@
         <p class="page-subtitle">{{ __('app.hotspot_template.subtitle') }}</p>
     </div>
 
+    @if ($routers->isNotEmpty())
+        <div class="flex flex-wrap gap-2 mb-4" role="tablist">
+            <a href="{{ route('client.hotspot-template.edit') }}" role="tab" aria-selected="{{ $router ? 'false' : 'true' }}"
+               class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ ! $router ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
+                {{ __('app.hotspot_template.default_tab') }}
+            </a>
+            @foreach ($routers as $r)
+                @php $isOwn = in_array($r->id, $ownRouterIds, true); $on = $router?->id === $r->id; @endphp
+                <a href="{{ route('client.hotspot-template.edit', ['router' => $r->id]) }}" role="tab" aria-selected="{{ $on ? 'true' : 'false' }}"
+                   class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium border transition {{ $on ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50' }}">
+                    {{ $r->name }}
+                    <span class="text-xs {{ $on ? 'text-white/70' : 'text-gray-400' }}">{{ $isOwn ? __('app.hotspot_template.own_badge') : __('app.hotspot_template.default_badge') }}</span>
+                </a>
+            @endforeach
+        </div>
+
+        <div class="info-box mb-6 flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p>
+                @if (! $router)
+                    {{ __('app.hotspot_template.default_notice') }}
+                @elseif ($own)
+                    {{ __('app.hotspot_template.own_notice', ['router' => $router->name]) }}
+                @else
+                    {{ __('app.hotspot_template.uses_default_notice', ['router' => $router->name]) }}
+                @endif
+            </p>
+            @if ($router)
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <form method="POST" action="{{ route('client.hotspot-template.copy', $router) }}" class="flex items-center gap-2"
+                          onsubmit="return confirm(@js(__('app.hotspot_template.copy_confirm', ['router' => $router->name])))">
+                        @csrf
+                        <select name="from" class="select !w-auto !py-1.5 text-sm" aria-label="{{ __('app.hotspot_template.copy_from') }}">
+                            <option value="default">{{ __('app.hotspot_template.copy_from') }}: {{ __('app.hotspot_template.default_tab') }}</option>
+                            @foreach ($routers as $r)
+                                @if ($r->id !== $router->id && in_array($r->id, $ownRouterIds, true))
+                                    <option value="{{ $r->id }}">{{ __('app.hotspot_template.copy_from') }}: {{ $r->name }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                        <button type="submit" class="btn-sm-edit">{{ __('app.hotspot_template.copy') }}</button>
+                    </form>
+                    @if ($own)
+                        <form method="POST" action="{{ route('client.hotspot-template.reset', $router) }}"
+                              onsubmit="return confirm(@js(__('app.hotspot_template.reset_confirm', ['router' => $router->name])))">
+                            @csrf
+                            <button type="submit" class="btn-sm-danger">{{ __('app.hotspot_template.reset') }}</button>
+                        </form>
+                    @endif
+                </div>
+            @endif
+        </div>
+    @endif
+
     <div class="grid gap-6 lg:grid-cols-5 items-start">
         <div class="lg:col-span-3 space-y-6">
-            <form id="tplForm" method="POST" action="{{ route('client.hotspot-template.update') }}" enctype="multipart/form-data" class="card">
+            <form id="tplForm" method="POST" action="{{ route('client.hotspot-template.update', $router ? ['router' => $router->id] : []) }}" enctype="multipart/form-data" class="card">
                 @csrf
                 @method('PUT')
                 <div class="divide-y divide-gray-100">
@@ -49,7 +102,7 @@
                                 <label class="label">{{ __('app.hotspot_template.background') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
                                 @if ($template->background_path)
                                     <div class="flex items-center gap-3 mb-2">
-                                        <img src="{{ route('client.hotspot-template.preview', $template->backgroundFileName()) }}" alt="" class="h-14 w-24 object-cover rounded-lg border border-gray-200">
+                                        <img src="{{ route('client.hotspot-template.preview', [$scope, $template->backgroundFileName()]) }}" alt="" class="h-14 w-24 object-cover rounded-lg border border-gray-200">
                                         <label class="inline-flex items-center gap-2 text-sm text-gray-600">
                                             <input type="checkbox" name="remove_background" value="1" class="rounded border-gray-300">
                                             {{ __('app.hotspot_template.remove_background') }}
@@ -88,7 +141,7 @@
                                 <label class="label">{{ __('app.hotspot_template.logo') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
                                 @if ($template->logo_path)
                                     <div class="flex items-center gap-3 mb-2">
-                                        <img src="{{ route('client.hotspot-template.preview', $template->logoFileName()) }}" alt="" class="h-10 max-w-[120px] object-contain rounded border border-gray-200 bg-gray-50 p-1">
+                                        <img src="{{ route('client.hotspot-template.preview', [$scope, $template->logoFileName()]) }}" alt="" class="h-10 max-w-[120px] object-contain rounded border border-gray-200 bg-gray-50 p-1">
                                         <label class="inline-flex items-center gap-2 text-sm text-gray-600">
                                             <input type="checkbox" name="remove_logo" value="1" class="rounded border-gray-300">
                                             {{ __('app.hotspot_template.remove_logo') }}
@@ -160,22 +213,22 @@
                         </dl>
                     </details>
                 </div>
-                @if (! $template->exists)
-                    <p class="px-6 py-5 text-sm text-gray-500">{{ __('app.hotspot_template.save_first') }}</p>
-                @elseif ($routers->isEmpty())
+                @if ($routers->isEmpty())
                     <p class="px-6 py-5 text-sm text-gray-500">{{ __('app.hotspot_template.no_router') }}</p>
                 @else
                     <ul class="divide-y divide-gray-100">
-                        @foreach ($routers as $router)
+                        @foreach ($routers as $target)
                             @php
-                                $applied = $router->login_template_applied_at;
-                                $stale = $applied && $template->updated_at && $template->updated_at->gt($applied);
+                                $shown = $effective[$target->id];
+                                $applied = $target->login_template_applied_at;
+                                $stale = $applied && $shown?->updated_at && $shown->updated_at->gt($applied);
                             @endphp
                             <li class="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                                 <div class="min-w-0">
-                                    <div class="text-sm font-medium truncate">{{ $router->name }}</div>
-                                    <div class="text-xs text-gray-500 font-mono">{{ $router->api_host }}</div>
-                                    <div class="mt-1.5 text-xs text-gray-500" data-storage="{{ $router->id }}">{{ __('app.hotspot_template.storage_checking') }}</div>
+                                    <div class="text-sm font-medium truncate">{{ $target->name }}</div>
+                                    <div class="text-xs text-gray-500">{{ in_array($target->id, $ownRouterIds, true) ? __('app.hotspot_template.uses_own') : __('app.hotspot_template.uses_default') }}</div>
+                                    <div class="text-xs text-gray-500 font-mono">{{ $target->api_host }}</div>
+                                    <div class="mt-1.5 text-xs text-gray-500" data-storage="{{ $target->id }}">{{ __('app.hotspot_template.storage_checking') }}</div>
                                     <div class="mt-1">
                                         @if (! $applied)
                                             <span class="badge bg-gray-100 text-gray-600">{{ __('app.hotspot_template.status_default') }}</span>
@@ -188,14 +241,14 @@
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
                                     @if ($applied)
-                                        <form method="POST" action="{{ route('client.hotspot-template.restore', $router) }}" data-busy>
+                                        <form method="POST" action="{{ route('client.hotspot-template.restore', $target) }}" data-busy>
                                             @csrf
                                             <button type="submit" class="btn-sm-edit">{{ __('app.hotspot_template.restore') }}</button>
                                         </form>
                                     @endif
-                                    <form method="POST" action="{{ route('client.hotspot-template.apply', $router) }}" data-busy>
+                                    <form method="POST" action="{{ route('client.hotspot-template.apply', $target) }}" data-busy>
                                         @csrf
-                                        <button type="submit" class="btn-sm bg-brand-600 text-white hover:bg-brand-700">{{ $applied ? __('app.hotspot_template.reapply') : __('app.hotspot_template.apply') }}</button>
+                                        <button type="submit" class="btn-sm bg-brand-600 text-white hover:bg-brand-700" @disabled(! $shown) title="{{ $shown ? '' : __('app.hotspot_template.save_first') }}">{{ $applied ? __('app.hotspot_template.reapply') : __('app.hotspot_template.apply') }}</button>
                                     </form>
                                 </div>
                             </li>
@@ -217,7 +270,7 @@
                     </div>
                 </div>
                 <div class="mx-auto max-w-[360px] rounded-[2rem] border-[10px] border-gray-900 overflow-hidden bg-gray-900">
-                    <iframe id="previewFrame" sandbox="allow-same-origin" title="{{ __('app.hotspot_template.preview') }}" src="{{ route('client.hotspot-template.preview', 'login') }}" class="block w-full h-[600px] bg-white"></iframe>
+                    <iframe id="previewFrame" sandbox="allow-same-origin" title="{{ __('app.hotspot_template.preview') }}" src="{{ route('client.hotspot-template.preview', [$scope, 'login']) }}" class="block w-full h-[600px] bg-white"></iframe>
                 </div>
             </div>
         </div>
@@ -227,7 +280,7 @@
         (function () {
             const form = document.getElementById('tplForm');
             const frame = document.getElementById('previewFrame');
-            const base = @json(url('/client/hotspot-template/preview'));
+            const base = @json(url('/client/hotspot-template/preview/'.$scope));
             const skip = ['_token', '_method', 'logo', 'remove_logo', 'background', 'remove_background'];
             let page = 'login';
             let timer;
