@@ -34,6 +34,14 @@ input[type=text], input[type=password] { width: 100%; padding: 12px 14px; border
 input[type=text]:focus, input[type=password]:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent); }
 .btn { display: block; width: 100%; padding: 13px; margin-top: 6px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font-size: 16px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; }
 .btn:hover { background: var(--brand-dark); }
+.banner { margin: 0 0 20px; text-align: center; }
+.banner img { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; }
+.banner p { margin: 10px 0 0; font-size: 14px; }
+.banner img + p { margin-top: 10px; }
+.links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 18px 0 0; }
+.links a { padding: 8px 14px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent); color: var(--brand); font-size: 14px; font-weight: 600; text-decoration: none; }
+.links a:hover { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.theme-dark .links a { color: #e5e7eb; border-color: #374151; }
 .alert { padding: 10px 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 13px; margin: 0 0 16px; }
 .stats { margin: 0 0 20px; padding: 0; border-radius: 12px; border: 1px solid rgba(127, 127, 127, .2); }
 .stats div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; font-size: 14px; }

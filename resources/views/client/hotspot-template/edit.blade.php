@@ -157,6 +157,47 @@
 
                     <section class="p-6 grid md:grid-cols-3 gap-4 md:gap-6">
                         <div>
+                            <h2 class="section-title">{{ __('app.hotspot_template.section_banner') }}</h2>
+                            <p class="section-desc">{{ __('app.hotspot_template.section_banner_desc') }}</p>
+                        </div>
+                        <div class="md:col-span-2 space-y-4">
+                            <div>
+                                <label class="label">{{ __('app.hotspot_template.banner') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
+                                @if ($template->banner_path)
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <img src="{{ route('client.hotspot-template.preview', [$scope, $template->bannerFileName()]) }}" alt="" class="h-14 w-24 object-cover rounded-lg border border-gray-200">
+                                        <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                                            <input type="checkbox" name="remove_banner" value="1" class="rounded border-gray-300">
+                                            {{ __('app.hotspot_template.remove_banner') }}
+                                        </label>
+                                    </div>
+                                @endif
+                                <input type="file" name="banner" data-max-kb="300" accept="image/png,image/jpeg,image/webp" class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200">
+                                <p class="hint">{{ __('app.hotspot_template.banner_hint') }}</p>
+                                <p class="hint !text-red-600 font-medium hidden" data-too-big="banner"></p>
+                            </div>
+                            <div>
+                                <label class="label" for="bannerText">{{ __('app.hotspot_template.banner_text') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
+                                <textarea id="bannerText" name="banner_text" rows="2" maxlength="255" class="input" placeholder="{{ __('app.hotspot_template.banner_text_placeholder') }}">{{ old('banner_text', $template->banner_text) }}</textarea>
+                            </div>
+                            <div>
+                                <span class="label">{{ __('app.hotspot_template.links') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></span>
+                                @php $links = old('links', $template->links ?? []); @endphp
+                                <div class="space-y-2">
+                                    @for ($i = 0; $i < \App\Models\HotspotTemplate::MAX_LINKS; $i++)
+                                        <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                                            <input name="links[{{ $i }}][label]" value="{{ $links[$i]['label'] ?? '' }}" maxlength="40" class="input sm:col-span-2" placeholder="{{ __('app.hotspot_template.link_label') }}" aria-label="{{ __('app.hotspot_template.link_label') }} {{ $i + 1 }}">
+                                            <input type="url" name="links[{{ $i }}][url]" value="{{ $links[$i]['url'] ?? '' }}" maxlength="255" class="input sm:col-span-3" placeholder="https://" aria-label="URL {{ $i + 1 }}">
+                                        </div>
+                                    @endfor
+                                </div>
+                                <p class="hint">{{ __('app.hotspot_template.links_hint') }}</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="p-6 grid md:grid-cols-3 gap-4 md:gap-6">
+                        <div>
                             <h2 class="section-title">{{ __('app.hotspot_template.section_login') }}</h2>
                             <p class="section-desc">{{ __('app.hotspot_template.section_login_desc') }}</p>
                         </div>
@@ -186,6 +227,15 @@
                                     <span class="block text-xs text-gray-500 mt-0.5">{{ __('app.hotspot_template.hold_popup_desc') }}</span>
                                 </span>
                             </label>
+                            <div class="flex items-center gap-3">
+                                <label class="label !mb-0" for="holdSeconds">{{ __('app.hotspot_template.hold_seconds') }}</label>
+                                <select id="holdSeconds" name="hold_seconds" class="select !w-auto">
+                                    @foreach (\App\Models\HotspotTemplate::HOLD_SECONDS as $sec)
+                                        <option value="{{ $sec }}" @selected((int) old('hold_seconds', $template->hold_seconds ?: 5) === $sec)>{{ __('app.hotspot_template.seconds', ['n' => $sec]) }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <p class="hint !mt-0">{{ __('app.hotspot_template.hold_seconds_hint') }}</p>
                             <div>
                                 <label class="label">{{ __('app.hotspot_template.contact') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
                                 <input name="contact" value="{{ old('contact', $template->contact) }}" maxlength="100" class="input" placeholder="WA 0812-3456-7890">
@@ -289,7 +339,7 @@
             const form = document.getElementById('tplForm');
             const frame = document.getElementById('previewFrame');
             const base = @json(url('/client/hotspot-template/preview/'.$scope));
-            const skip = ['_token', '_method', 'logo', 'remove_logo', 'background', 'remove_background'];
+            const skip = ['_token', '_method', 'logo', 'remove_logo', 'background', 'remove_background', 'banner', 'remove_banner'];
             let page = 'login';
             let timer;
 
@@ -314,6 +364,18 @@
                     doc.body.style.background = 'linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)), url("' + picked.background + '") center / cover no-repeat';
                     const footer = doc.querySelector('.footer');
                     if (footer) { footer.style.color = '#fff'; footer.style.textShadow = '0 1px 3px rgba(0,0,0,.6)'; }
+                }
+                if (picked.banner) {
+                    let box = doc.querySelector('.banner');
+                    if (! box) {
+                        box = doc.createElement('div');
+                        box.className = 'banner';
+                        const login = doc.querySelector('form[name=login]');
+                        if (login) login.before(box);
+                    }
+                    let img = box.querySelector('img');
+                    if (! img) { img = doc.createElement('img'); box.prepend(img); }
+                    img.src = picked.banner;
                 }
                 if (picked.logo) {
                     const old = doc.querySelector('.logo, .mark');

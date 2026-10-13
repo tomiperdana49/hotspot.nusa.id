@@ -82,9 +82,12 @@ class HotspotTemplateController extends Controller
             'remove_logo' => ['nullable', 'boolean'],
             'background' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:500'],
             'remove_background' => ['nullable', 'boolean'],
+            'banner' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:300'],
+            'remove_banner' => ['nullable', 'boolean'],
             'hold_popup' => ['nullable', 'boolean'],
-        ]);
+        ] + $this->linkRules());
         $data['hold_popup'] = $request->boolean('hold_popup');
+        $data['links'] = $this->links($request->input('links'));
 
         // Saving on a router tab that still shows the default starts that
         // router's own design from a copy of the default.
@@ -94,8 +97,9 @@ class HotspotTemplateController extends Controller
 
         $this->replaceImage($request, $template, 'logo', 'logo_path', 'hotspot-logos');
         $this->replaceImage($request, $template, 'background', 'background_path', 'hotspot-backgrounds');
+        $this->replaceImage($request, $template, 'banner', 'banner_path', 'hotspot-banners');
 
-        $template->fill(collect($data)->except(['logo', 'remove_logo', 'background', 'remove_background'])->all());
+        $template->fill(collect($data)->except(['logo', 'remove_logo', 'background', 'remove_background', 'banner', 'remove_banner'])->all());
         $template->save();
 
         return $this->backTo($router)->with('status', $router
@@ -165,6 +169,10 @@ class HotspotTemplateController extends Controller
             }
         }
 
+        if ($request->has('links') && Validator::make($request->only('links'), $this->linkRules())->passes()) {
+            $template->links = $this->links($request->input('links'));
+        }
+
         return response($this->renderer->preview($template, $file))
             ->header('Content-Type', 'text/html; charset=utf-8');
     }
@@ -190,17 +198,25 @@ class HotspotTemplateController extends Controller
             return back()->with('connect_error', $result['message']);
         }
 
-        // The pop-up hold follows the template: on when it asks for it,
-        // otherwise taken off in case an earlier template put it there.
+        // The pop-up hold and the walled garden for the page's links follow
+        // the template: set up when it asks for them, otherwise taken off in
+        // case an earlier template put them there.
         $hold = $this->connector->syncPortalHold(
             $router,
             $template->hold_popup,
             $template->redirect_url ? parse_url($template->redirect_url, PHP_URL_HOST) : null,
+            $template->hold_seconds ?: 5,
         );
+        if (! $hold['ok']) {
+            return back()->with('connect_error', __('app.hotspot_template.hold_failed', ['reason' => $hold['message']]));
+        }
 
-        return $hold['ok']
-            ? back()->with('status', $result['message'])
-            : back()->with('connect_error', __('app.hotspot_template.hold_failed', ['reason' => $hold['message']]));
+        $walled = $this->connector->syncWalledGarden($router, $template->linkHosts());
+        if (! $walled['ok']) {
+            return back()->with('connect_error', __('app.hotspot_template.links_failed', ['reason' => $walled['message']]));
+        }
+
+        return back()->with('status', $result['message']);
     }
 
     public function restore(Router $router): RedirectResponse
@@ -246,7 +262,39 @@ class HotspotTemplateController extends Controller
             'contact' => ['nullable', 'string', 'max:100'],
             'footer_text' => ['nullable', 'string', 'max:255'],
             'redirect_url' => ['nullable', 'url:http,https', 'max:255'],
+            'hold_seconds' => ['required', Rule::in(HotspotTemplate::HOLD_SECONDS)],
+            'banner_text' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    private function linkRules(): array
+    {
+        return [
+            'links' => ['nullable', 'array', 'max:'.HotspotTemplate::MAX_LINKS],
+            'links.*.label' => ['nullable', 'string', 'max:40'],
+            'links.*.url' => ['nullable', 'url:http,https', 'max:255'],
+        ];
+    }
+
+    /**
+     * The link rows that have a URL; a row without a label shows its host.
+     *
+     * @return array<int, array{label: string, url: string}>
+     */
+    private function links(mixed $rows): array
+    {
+        return collect(is_array($rows) ? $rows : [])
+            ->filter(fn ($row) => is_array($row) && filled($row['url'] ?? null))
+            ->map(fn (array $row) => [
+                'label' => trim((string) ($row['label'] ?? '')) ?: (string) parse_url($row['url'], PHP_URL_HOST),
+                'url' => trim((string) $row['url']),
+            ])
+            ->take(HotspotTemplate::MAX_LINKS)
+            ->values()
+            ->all();
     }
 
     /**

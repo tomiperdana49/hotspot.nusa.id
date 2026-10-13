@@ -15,16 +15,26 @@ class HotspotTemplate extends Model
 
     public const PAGE_LANGS = ['id', 'en'];
 
+    /**
+     * Seconds hold_popup may keep the login pop-up open.
+     */
+    public const HOLD_SECONDS = [5, 10, 15];
+
+    /**
+     * Most links a login page shows.
+     */
+    public const MAX_LINKS = 3;
+
     protected $table = 'hotspot_templates';
 
     protected $fillable = [
         'client_id', 'router_id', 'token', 'theme', 'page_lang', 'title', 'welcome_text',
-        'primary_color', 'login_mode', 'redirect_url', 'hold_popup', 'logo_path', 'background_path', 'contact', 'footer_text',
+        'primary_color', 'login_mode', 'redirect_url', 'hold_popup', 'hold_seconds', 'banner_path', 'banner_text', 'links', 'logo_path', 'background_path', 'contact', 'footer_text',
     ];
 
     protected function casts(): array
     {
-        return ['hold_popup' => 'boolean'];
+        return ['hold_popup' => 'boolean', 'hold_seconds' => 'integer', 'links' => 'array'];
     }
 
     public function client(): BelongsTo
@@ -79,11 +89,11 @@ class HotspotTemplate extends Model
      */
     public function copyFor(Router $router): self
     {
-        $copy = $this->replicate(['router_id', 'token', 'logo_path', 'background_path']);
+        $copy = $this->replicate(['router_id', 'token', 'logo_path', 'background_path', 'banner_path']);
         $copy->router_id = $router->id;
         $copy->token = Str::random(40);
 
-        foreach (['logo_path' => 'hotspot-logos', 'background_path' => 'hotspot-backgrounds'] as $column => $folder) {
+        foreach (['logo_path' => 'hotspot-logos', 'background_path' => 'hotspot-backgrounds', 'banner_path' => 'hotspot-banners'] as $column => $folder) {
             if ($this->{$column} && Storage::disk('local')->exists($this->{$column})) {
                 $path = $folder.'/'.Str::random(40).'.'.pathinfo($this->{$column}, PATHINFO_EXTENSION);
                 Storage::disk('local')->copy($this->{$column}, $path);
@@ -99,7 +109,7 @@ class HotspotTemplate extends Model
      */
     public function deleteWithFiles(): void
     {
-        foreach (['logo_path', 'background_path'] as $column) {
+        foreach (['logo_path', 'background_path', 'banner_path'] as $column) {
             if ($this->{$column}) {
                 Storage::disk('local')->delete($this->{$column});
             }
@@ -125,6 +135,30 @@ class HotspotTemplate extends Model
     }
 
     /**
+     * File name the login-page banner gets next to login.html on the router.
+     */
+    public function bannerFileName(): ?string
+    {
+        return $this->banner_path ? 'banner.'.pathinfo($this->banner_path, PATHINFO_EXTENSION) : null;
+    }
+
+    /**
+     * Hosts of the login-page links, which the router lets guests open
+     * before they log in.
+     *
+     * @return array<int, string>
+     */
+    public function linkHosts(): array
+    {
+        return collect($this->links ?? [])
+            ->map(fn (array $link) => parse_url($link['url'] ?? '', PHP_URL_HOST))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Storage path of an uploaded image by its file name on the router
      * (logo.png, bg.jpg), or null when $file isn't one of them.
      */
@@ -133,6 +167,7 @@ class HotspotTemplate extends Model
         return match ($file) {
             $this->logoFileName() => $this->logo_path,
             $this->backgroundFileName() => $this->background_path,
+            $this->bannerFileName() => $this->banner_path,
             default => null,
         };
     }

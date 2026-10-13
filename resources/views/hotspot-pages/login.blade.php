@@ -3,6 +3,17 @@
 @section('content')
 <p class="lead">{!! $t->welcome_text ? $text($t->welcome_text) : e(__('app.hotspot_page.login_lead', [], $lang)) !!}</p>
 
+@if ($t->bannerFileName() || $t->banner_text)
+<div class="banner">
+    @if ($t->bannerFileName())
+        <img src="{{ $t->bannerFileName() }}" alt="">
+    @endif
+    @if ($t->banner_text)
+        <p>{!! nl2br($text($t->banner_text)) !!}</p>
+    @endif
+</div>
+@endif
+
 $(if error)<div class="alert">$(error)</div>$(endif)
 
 {{-- http-chap: send MD5(chap-id + password + chap-challenge), never the plain password. --}}
@@ -63,6 +74,15 @@ $(endif)
 @endif
     <button type="submit" class="btn">{{ __('app.hotspot_page.login', [], $lang) }}</button>
 </form>
+
+{{-- Hosts of these links are in the router's walled garden, so they open before login. --}}
+@if (! empty($t->links))
+<div class="links">
+    @foreach ($t->links as $link)
+        <a href="{!! $text($link['url']) !!}" target="_blank" rel="noopener">{!! $text($link['label']) !!}</a>
+    @endforeach
+</div>
+@endif
 
 @if ($t->contact)
 <p class="contact">{{ __('app.hotspot_page.help', [], $lang) }} {!! $text($t->contact) !!}</p>

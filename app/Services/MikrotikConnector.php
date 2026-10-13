@@ -88,10 +88,15 @@ class MikrotikConnector
     private const PORTAL_HOLD_TAG = 'nusa-portalhold';
 
     /**
-     * How long after login a guest's web traffic is refused (bar the
-     * redirect page), so the phone's login pop-up stays open to show it.
+     * Default for how long after login a guest's web traffic is refused
+     * (bar the redirect page), so the phone's login pop-up stays open.
      */
     private const PORTAL_HOLD_SECONDS = 5;
+
+    /**
+     * Comment on the walled-garden entries for login-page links.
+     */
+    private const WALLED_TAG = 'nusa-walled';
 
     /**
      * Public resolvers reached over DNS-over-HTTPS, refused from the hotspot
@@ -1395,6 +1400,7 @@ class MikrotikConnector
 
             $this->applyBlockedSites($client, []);
             $this->applyPortalHold($client, $router, false);
+            $this->applyWalledGarden($client, []);
 
             foreach ($client->query((new Query('/radius/print'))->where('comment', 'nusa-hotspot'))->read() as $row) {
                 if (isset($row['.id'])) {
@@ -1725,7 +1731,7 @@ class MikrotikConnector
      *
      * @return array{ok: bool, message: string}
      */
-    public function syncPortalHold(Router $router, bool $enabled, ?string $allowHost = null): array
+    public function syncPortalHold(Router $router, bool $enabled, ?string $allowHost = null, int $seconds = self::PORTAL_HOLD_SECONDS): array
     {
         if (blank($router->api_host)) {
             return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
@@ -1741,7 +1747,7 @@ class MikrotikConnector
                 'attempts' => 1,
             ]);
 
-            $this->applyPortalHold($client, $router, $enabled, $allowHost);
+            $this->applyPortalHold($client, $router, $enabled, $allowHost, $seconds);
 
             return ['ok' => true, 'message' => $enabled ? 'Penahan pop-up login aktif.' : 'Penahan pop-up login dimatikan.'];
         } catch (BadCredentialsException) {
@@ -1755,7 +1761,7 @@ class MikrotikConnector
         }
     }
 
-    private function applyPortalHold(Client $client, Router $router, bool $enabled, ?string $allowHost = null): void
+    private function applyPortalHold(Client $client, Router $router, bool $enabled, ?string $allowHost = null, int $seconds = self::PORTAL_HOLD_SECONDS): void
     {
         $tag = self::PORTAL_HOLD_TAG;
         $allowList = "{$tag}-allow";
@@ -1779,7 +1785,7 @@ class MikrotikConnector
 
         // The script goes on every user profile the client's vouchers log in
         // with (their Mikrotik-Group). Lines an admin wrote there stay.
-        $snippet = ':do { /ip firewall address-list add list='.$tag.' address=$address timeout='.self::PORTAL_HOLD_SECONDS.'s comment='.$tag.' } on-error={}';
+        $snippet = ':do { /ip firewall address-list add list='.$tag.' address=$address timeout='.max(1, $seconds).'s comment='.$tag.' } on-error={}';
         $names = Profile::where('client_id', $router->client_id)->pluck('mikrotik_group')
             ->push(self::RADIUS_NUSA_PROFILE)->filter()->unique()->all();
 
@@ -1804,6 +1810,62 @@ class MikrotikConnector
                 );
             }
         }
+    }
+
+    /**
+     * Let guests open the login page's links before they log in: each host
+     * goes into the walled garden for plain HTTP and into walled-garden ip
+     * for HTTPS. Hosts no longer linked are taken out again.
+     *
+     * @param  array<int, string>  $hosts
+     * @return array{ok: bool, message: string}
+     */
+    public function syncWalledGarden(Router $router, array $hosts): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+                'attempts' => 1,
+            ]);
+
+            $this->applyWalledGarden($client, $hosts);
+
+            return ['ok' => true, 'message' => count($hosts).' link bisa dibuka sebelum login.'];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $hosts
+     */
+    private function applyWalledGarden(Client $client, array $hosts): void
+    {
+        $tag = self::WALLED_TAG;
+        $http = [];
+        $https = [];
+
+        foreach ($hosts as $host) {
+            $http["{$tag}:{$host}"] = ['dst-host' => $host, 'action' => 'allow'];
+            $https["{$tag}:{$host}"] = ['dst-host' => $host, 'action' => 'accept'];
+        }
+
+        $this->syncTaggedEntries($client, '/ip/hotspot/walled-garden', $http, tag: $tag);
+        $this->syncTaggedEntries($client, '/ip/hotspot/walled-garden/ip', $https, tag: $tag);
     }
 
     /**
@@ -2030,6 +2092,7 @@ class MikrotikConnector
             }
 
             $this->applyPortalHold($client, $router, false);
+            $this->applyWalledGarden($client, []);
 
             $router->update([
                 'login_template_dir' => null,

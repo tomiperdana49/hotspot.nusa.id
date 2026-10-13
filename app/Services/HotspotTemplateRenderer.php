@@ -32,7 +32,7 @@ class HotspotTemplateRenderer
         $files = array_map(fn (string $page) => "{$page}.html", self::PAGES);
         $files[] = 'md5.js';
 
-        foreach ([$template->logoFileName(), $template->backgroundFileName()] as $image) {
+        foreach ([$template->logoFileName(), $template->backgroundFileName(), $template->bannerFileName()] as $image) {
             if ($image) {
                 $files[] = $image;
             }
