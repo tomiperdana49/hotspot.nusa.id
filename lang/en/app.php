@@ -615,6 +615,7 @@ return [
     ],
 
     'hotspot_page' => [
+        'redirecting' => 'Redirecting…',
         'show_password' => 'Show password',
         'hide_password' => 'Hide password',
         'login_lead' => 'Please log in to start browsing.',

@@ -615,6 +615,7 @@ return [
     ],
 
     'hotspot_page' => [
+        'redirecting' => 'Mengalihkan…',
         'show_password' => 'Tampilkan password',
         'hide_password' => 'Sembunyikan password',
         'login_lead' => 'Silakan login untuk mulai berinternet.',
