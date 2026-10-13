@@ -541,6 +541,9 @@ return [
     ],
 
     'hotspot_template' => [
+        'hold_popup' => 'Tahan pop-up agar halaman tujuan tampil',
+        'hold_popup_desc' => 'Pop-up login bawaan HP ditahan sekitar 5 detik setelah login, cukup untuk membuka URL di atas. Selama itu aplikasi lain di HP tamu belum tersambung. Berlaku setelah template diterapkan ke router.',
+        'hold_failed' => 'Template terpasang, tapi penahan pop-up gagal diatur: :reason',
         'default_tab' => 'Default',
         'default_badge' => 'pakai Default',
         'own_badge' => 'khusus',
@@ -590,7 +593,7 @@ return [
         'preview' => 'Pratinjau',
         'pages' => ['login' => 'Login', 'alogin' => 'Berhasil', 'status' => 'Status', 'logout' => 'Logout'],
         'redirect_url' => 'URL setelah login',
-        'redirect_url_hint' => 'Dibuka setelah login berhasil di browser seperti Chrome atau Safari. Pop-up login bawaan HP biasanya langsung tertutup setelah login, jadi halaman ini bisa tidak tampil di sana. Kosongkan untuk membuka halaman Status.',
+        'redirect_url_hint' => 'Dibuka setelah login berhasil. Pop-up login bawaan HP biasanya langsung tertutup setelah login, jadi aktifkan pilihan di bawah agar halaman ini tetap tampil di sana. Kosongkan untuk membuka halaman Status.',
         'apply_title' => 'Terapkan ke router',
         'apply_desc' => 'Router akan mengunduh file template dan memakainya untuk hotspot server yang aktif.',
         'apply_note' => 'Router perlu bisa mengakses internet (hotspot.nusa.id). Kembalikan bawaan untuk memakai halaman login sebelumnya.',

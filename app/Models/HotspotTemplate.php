@@ -19,8 +19,13 @@ class HotspotTemplate extends Model
 
     protected $fillable = [
         'client_id', 'router_id', 'token', 'theme', 'page_lang', 'title', 'welcome_text',
-        'primary_color', 'login_mode', 'redirect_url', 'logo_path', 'background_path', 'contact', 'footer_text',
+        'primary_color', 'login_mode', 'redirect_url', 'hold_popup', 'logo_path', 'background_path', 'contact', 'footer_text',
     ];
+
+    protected function casts(): array
+    {
+        return ['hold_popup' => 'boolean'];
+    }
 
     public function client(): BelongsTo
     {

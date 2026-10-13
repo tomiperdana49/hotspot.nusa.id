@@ -178,6 +178,14 @@
                                 <input type="url" name="redirect_url" value="{{ old('redirect_url', $template->redirect_url) }}" maxlength="255" class="input" placeholder="https://nusa.id">
                                 <p class="hint">{{ __('app.hotspot_template.redirect_url_hint') }}</p>
                             </div>
+                            <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/60">
+                                <input type="hidden" name="hold_popup" value="0">
+                                <input type="checkbox" name="hold_popup" value="1" @checked(old('hold_popup', $template->hold_popup)) class="mt-0.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+                                <span>
+                                    <span class="block text-sm font-medium text-gray-900">{{ __('app.hotspot_template.hold_popup') }}</span>
+                                    <span class="block text-xs text-gray-500 mt-0.5">{{ __('app.hotspot_template.hold_popup_desc') }}</span>
+                                </span>
+                            </label>
                             <div>
                                 <label class="label">{{ __('app.hotspot_template.contact') }} <span class="font-normal text-gray-400">({{ __('app.ui.optional') }})</span></label>
                                 <input name="contact" value="{{ old('contact', $template->contact) }}" maxlength="100" class="input" placeholder="WA 0812-3456-7890">

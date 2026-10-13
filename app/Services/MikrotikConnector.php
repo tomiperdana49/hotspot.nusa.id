@@ -82,6 +82,18 @@ class MikrotikConnector
     private const BLOCK_TAG = 'nusa-block';
 
     /**
+     * Comment on everything syncPortalHold() puts on a router, and the name
+     * of the address list a guest's IP sits on right after login.
+     */
+    private const PORTAL_HOLD_TAG = 'nusa-portalhold';
+
+    /**
+     * How long after login a guest's web traffic is refused (bar the
+     * redirect page), so the phone's login pop-up stays open to show it.
+     */
+    private const PORTAL_HOLD_SECONDS = 5;
+
+    /**
      * Public resolvers reached over DNS-over-HTTPS, refused from the hotspot
      * while sites are blocked so a phone can't look a domain up past the
      * router. Plain DNS to them is redirected to the router anyway.
@@ -1382,6 +1394,7 @@ class MikrotikConnector
             }
 
             $this->applyBlockedSites($client, []);
+            $this->applyPortalHold($client, $router, false);
 
             foreach ($client->query((new Query('/radius/print'))->where('comment', 'nusa-hotspot'))->read() as $row) {
                 if (isset($row['.id'])) {
@@ -1561,8 +1574,8 @@ class MikrotikConnector
     }
 
     /**
-     * Make the entries under $menu whose comment carries the nusa-block tag
-     * match $wanted (keyed by comment). Entries already there are kept as
+     * Make the entries under $menu whose comment carries $tag (the
+     * nusa-block tag unless given) match $wanted (keyed by comment). Entries already there are kept as
      * they are. New forward, input and dstnat rules go above the first
      * static rule, so an "accept" rule an admin added can't let the traffic
      * past first. $list limits an address-list menu to one list.
@@ -1570,9 +1583,8 @@ class MikrotikConnector
      * @param  array<string, array<string, string>>  $wanted
      * @param  array<int, array<string, string>>|null  $rows  a print of $menu already read
      */
-    private function syncTaggedEntries(Client $client, string $menu, array $wanted, ?string $list = null, ?array $rows = null, bool $removeStale = true): void
+    private function syncTaggedEntries(Client $client, string $menu, array $wanted, ?string $list = null, ?array $rows = null, bool $removeStale = true, string $tag = self::BLOCK_TAG): void
     {
-        $tag = self::BLOCK_TAG;
         $rows ??= $client->query(new Query("{$menu}/print"))->read();
         $ours = fn (array $row) => (($row['comment'] ?? '') === $tag || str_starts_with($row['comment'] ?? '', "{$tag}:"))
             && ($list === null || ($row['list'] ?? null) === $list);
@@ -1698,6 +1710,98 @@ class MikrotikConnector
         foreach ($interfaces as $interface) {
             if (! isset($present[$interface])) {
                 $client->query((new Query('/interface/list/member/add'))->equal('list', $name)->equal('interface', $interface))->read();
+            }
+        }
+    }
+
+    /**
+     * Keep the phone's own login pop-up open long enough to show the page
+     * after login. Android, iOS and Windows close that pop-up as soon as
+     * their connectivity check gets through, usually before the redirect
+     * page loads. With the hold on, an on-login script puts the guest's IP
+     * on a list for PORTAL_HOLD_SECONDS, during which its web traffic is
+     * refused except to $allowHost (the redirect page), so the check fails
+     * and the pop-up stays. Off removes all of it again.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function syncPortalHold(Router $router, bool $enabled, ?string $allowHost = null): array
+    {
+        if (blank($router->api_host)) {
+            return ['ok' => false, 'message' => 'Router belum terhubung via API (api_host kosong).'];
+        }
+
+        try {
+            $client = new Client([
+                'host' => $router->api_host,
+                'user' => $router->api_user,
+                'pass' => $router->api_pass,
+                'port' => (int) $router->api_port,
+                'timeout' => 8,
+                'attempts' => 1,
+            ]);
+
+            $this->applyPortalHold($client, $router, $enabled, $allowHost);
+
+            return ['ok' => true, 'message' => $enabled ? 'Penahan pop-up login aktif.' : 'Penahan pop-up login dimatikan.'];
+        } catch (BadCredentialsException) {
+            return ['ok' => false, 'message' => 'Username atau password API router salah.'];
+        } catch (ConnectException) {
+            return ['ok' => false, 'message' => "Tidak bisa terhubung ke router {$router->api_host}:{$router->api_port}."];
+        } catch (ConfigException|QueryException|ClientException|StreamException $e) {
+            return ['ok' => false, 'message' => 'Perintah ke router gagal: '.$e->getMessage()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function applyPortalHold(Client $client, Router $router, bool $enabled, ?string $allowHost = null): void
+    {
+        $tag = self::PORTAL_HOLD_TAG;
+        $allowList = "{$tag}-allow";
+        $filter = [];
+        $allow = [];
+
+        if ($enabled) {
+            $held = ['chain' => 'forward', 'action' => 'reject', 'src-address-list' => $tag, 'dst-address-list' => "!{$allowList}"];
+            $filter["{$tag}:tcp"] = $held + ['reject-with' => 'tcp-reset', 'protocol' => 'tcp', 'dst-port' => '80,443'];
+            $filter["{$tag}:quic"] = $held + ['reject-with' => 'icmp-port-unreachable', 'protocol' => 'udp', 'dst-port' => '443'];
+
+            if (filled($allowHost)) {
+                $allow["{$tag}:{$allowHost}"] = ['list' => $allowList, 'address' => $allowHost];
+            }
+        }
+
+        // The allow list goes in before the rules that refer to it, and out after them.
+        $this->syncTaggedEntries($client, '/ip/firewall/address-list', $allow, $allowList, removeStale: false, tag: $tag);
+        $this->syncTaggedEntries($client, '/ip/firewall/filter', $filter, tag: $tag);
+        $this->syncTaggedEntries($client, '/ip/firewall/address-list', $allow, $allowList, tag: $tag);
+
+        // The script goes on every user profile the client's vouchers log in
+        // with (their Mikrotik-Group). Lines an admin wrote there stay.
+        $snippet = ':do { /ip firewall address-list add list='.$tag.' address=$address timeout='.self::PORTAL_HOLD_SECONDS.'s comment='.$tag.' } on-error={}';
+        $names = Profile::where('client_id', $router->client_id)->pluck('mikrotik_group')
+            ->push(self::RADIUS_NUSA_PROFILE)->filter()->unique()->all();
+
+        foreach ($client->query(new Query('/ip/hotspot/user/profile/print'))->read() as $profile) {
+            if (! in_array($profile['name'] ?? null, $names, true) || ! isset($profile['.id'])) {
+                continue;
+            }
+
+            $lines = array_values(array_filter(
+                preg_split('/\r?\n/', (string) ($profile['on-login'] ?? '')),
+                fn (string $line) => trim($line) !== '' && ! str_contains($line, "list={$tag} "),
+            ));
+            if ($enabled) {
+                $lines[] = $snippet;
+            }
+
+            $script = implode("\n", $lines);
+            if ($script !== (string) ($profile['on-login'] ?? '')) {
+                $this->mustSucceed(
+                    $client->query((new Query('/ip/hotspot/user/profile/set'))->equal('.id', $profile['.id'])->equal('on-login', $script))->read(),
+                    "on-login {$profile['name']}",
+                );
             }
         }
     }
@@ -1924,6 +2028,8 @@ class MikrotikConnector
                         ->equal('html-directory', $backup[$profile['name']] ?? 'hotspot')
                 )->read();
             }
+
+            $this->applyPortalHold($client, $router, false);
 
             $router->update([
                 'login_template_dir' => null,

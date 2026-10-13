@@ -82,7 +82,9 @@ class HotspotTemplateController extends Controller
             'remove_logo' => ['nullable', 'boolean'],
             'background' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:500'],
             'remove_background' => ['nullable', 'boolean'],
+            'hold_popup' => ['nullable', 'boolean'],
         ]);
+        $data['hold_popup'] = $request->boolean('hold_popup');
 
         // Saving on a router tab that still shows the default starts that
         // router's own design from a copy of the default.
@@ -184,7 +186,21 @@ class HotspotTemplateController extends Controller
             array_sum($this->renderer->fileSizes($template)),
         );
 
-        return back()->with($result['ok'] ? 'status' : 'connect_error', $result['message']);
+        if (! $result['ok']) {
+            return back()->with('connect_error', $result['message']);
+        }
+
+        // The pop-up hold follows the template: on when it asks for it,
+        // otherwise taken off in case an earlier template put it there.
+        $hold = $this->connector->syncPortalHold(
+            $router,
+            $template->hold_popup,
+            $template->redirect_url ? parse_url($template->redirect_url, PHP_URL_HOST) : null,
+        );
+
+        return $hold['ok']
+            ? back()->with('status', $result['message'])
+            : back()->with('connect_error', __('app.hotspot_template.hold_failed', ['reason' => $hold['message']]));
     }
 
     public function restore(Router $router): RedirectResponse

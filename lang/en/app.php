@@ -541,6 +541,9 @@ return [
     ],
 
     'hotspot_template' => [
+        'hold_popup' => 'Hold the login pop-up so the page shows',
+        'hold_popup_desc' => 'The phone\'s own login pop-up is held open for about 5 seconds after login, long enough to open the URL above. Other apps on the guest\'s phone wait during that time. Takes effect once the template is applied to the router.',
+        'hold_failed' => 'The template was applied, but the pop-up hold could not be set: :reason',
         'default_tab' => 'Default',
         'default_badge' => 'uses Default',
         'own_badge' => 'own design',
@@ -590,7 +593,7 @@ return [
         'preview' => 'Preview',
         'pages' => ['login' => 'Login', 'alogin' => 'Success', 'status' => 'Status', 'logout' => 'Logout'],
         'redirect_url' => 'URL after login',
-        'redirect_url_hint' => 'Opens after a successful login in a browser such as Chrome or Safari. The phone\'s own login pop-up usually closes as soon as the login succeeds, so it may not show this page. Leave empty to open the Status page.',
+        'redirect_url_hint' => 'Opens after a successful login. The phone\'s own login pop-up usually closes as soon as the login succeeds, so turn on the option below to keep this page showing there. Leave empty to open the Status page.',
         'apply_title' => 'Apply to routers',
         'apply_desc' => 'The router downloads the template files and uses them for its active hotspot servers.',
         'apply_note' => 'The router needs internet access (hotspot.nusa.id). Restore default to go back to the previous login page.',
