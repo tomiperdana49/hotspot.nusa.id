@@ -590,7 +590,7 @@ return [
         'preview' => 'Pratinjau',
         'pages' => ['login' => 'Login', 'alogin' => 'Berhasil', 'status' => 'Status', 'logout' => 'Logout'],
         'redirect_url' => 'URL setelah login',
-        'redirect_url_hint' => 'Pelanggan diarahkan ke sini setelah login berhasil. Kosongkan untuk membuka halaman Status.',
+        'redirect_url_hint' => 'Dibuka setelah login berhasil di browser seperti Chrome atau Safari. Pop-up login bawaan HP biasanya langsung tertutup setelah login, jadi halaman ini bisa tidak tampil di sana. Kosongkan untuk membuka halaman Status.',
         'apply_title' => 'Terapkan ke router',
         'apply_desc' => 'Router akan mengunduh file template dan memakainya untuk hotspot server yang aktif.',
         'apply_note' => 'Router perlu bisa mengakses internet (hotspot.nusa.id). Kembalikan bawaan untuk memakai halaman login sebelumnya.',
