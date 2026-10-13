@@ -24,6 +24,11 @@ h1 { font-size: 22px; line-height: 1.25; margin: 0 0 6px; text-align: center; }
 .lead { margin: 0 0 24px; text-align: center; opacity: .7; font-size: 14px; }
 label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
 input[type=text], input[type=password] { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #d1d5db; background: #fff; color: #111827; font-size: 16px; margin: 0 0 14px; outline: none; }
+.pw { position: relative; margin: 0 0 14px; }
+.pw input { margin: 0; padding-right: 52px; }
+.pw-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); display: flex; padding: 8px; border: 0; border-radius: 8px; background: none; color: #6b7280; cursor: pointer; }
+.pw-toggle:focus-visible { outline: 2px solid var(--brand); }
+.pw-toggle svg { width: 22px; height: 22px; }
 input[type=text]:focus, input[type=password]:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent); }
 .btn { display: block; width: 100%; padding: 13px; margin-top: 6px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font-size: 16px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; }
 .btn:hover { background: var(--brand-dark); }
@@ -44,6 +49,7 @@ input[type=text]:focus, input[type=password]:focus { border-color: var(--brand);
 .theme-dark { background: #0b1120; color: #e5e7eb; }
 .theme-dark .card { background: #111827; border: 1px solid #1f2937; }
 .theme-dark input[type=text], .theme-dark input[type=password] { background: #0b1120; border-color: #374151; color: #f9fafb; }
+.theme-dark .pw-toggle { color: #9ca3af; }
 .theme-dark .alert { background: #3f1d1d; color: #fecaca; }
 @if ($t->backgroundFileName())
 body.has-bg { background: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .35)), url("{{ $t->backgroundFileName() }}") center / cover no-repeat fixed; }
