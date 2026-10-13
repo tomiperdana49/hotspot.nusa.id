@@ -4,10 +4,12 @@ use App\Http\Controllers\Admin\ClientController as AdminClientController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Auth\AdminLoginController;
 use App\Http\Controllers\Auth\ClientLoginController;
+use App\Http\Controllers\Client\BlockedSiteController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
 use App\Http\Controllers\Client\DeviceController;
 use App\Http\Controllers\Client\HistoryController;
 use App\Http\Controllers\Client\HotspotTemplateController;
+use App\Http\Controllers\Client\LoginTestController;
 use App\Http\Controllers\Client\ProfileController;
 use App\Http\Controllers\Client\RouterController;
 use App\Http\Controllers\Client\UserController;
@@ -51,8 +53,11 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
     Route::resource('profiles', ProfileController::class)->except(['show']);
 
     Route::get('/routers/live-status', [RouterController::class, 'liveStatus'])->name('routers.live-status');
-    Route::resource('routers', RouterController::class)->only(['index', 'create', 'store', 'show']);
+    Route::resource('routers', RouterController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
     Route::post('/routers/{router}/connect', [RouterController::class, 'connect'])->name('routers.connect');
+    Route::post('/routers/{router}/blocked-sites', [BlockedSiteController::class, 'store'])->name('routers.blocked-sites.store');
+    Route::post('/routers/{router}/blocked-sites/sync', [BlockedSiteController::class, 'sync'])->name('routers.blocked-sites.sync');
+    Route::delete('/routers/{router}/blocked-sites/{blockedSite}', [BlockedSiteController::class, 'destroy'])->name('routers.blocked-sites.destroy');
 
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
@@ -71,10 +76,14 @@ Route::middleware('auth:client')->prefix('client')->name('client.')->group(funct
     Route::get('/hotspot-template', [HotspotTemplateController::class, 'edit'])->name('hotspot-template.edit');
     Route::put('/hotspot-template', [HotspotTemplateController::class, 'update'])->name('hotspot-template.update');
     Route::get('/hotspot-template/storage', [HotspotTemplateController::class, 'storage'])->name('hotspot-template.storage');
-    Route::get('/hotspot-template/preview/{file}', [HotspotTemplateController::class, 'preview'])
-        ->where('file', '[a-z0-9.]+')->name('hotspot-template.preview');
+    Route::get('/hotspot-template/preview/{scope}/{file}', [HotspotTemplateController::class, 'preview'])
+        ->where(['scope' => 'default|[0-9]+', 'file' => '[a-z0-9.]+'])->name('hotspot-template.preview');
+    Route::post('/hotspot-template/copy/{router}', [HotspotTemplateController::class, 'copy'])->name('hotspot-template.copy');
+    Route::post('/hotspot-template/reset/{router}', [HotspotTemplateController::class, 'reset'])->name('hotspot-template.reset');
     Route::post('/hotspot-template/apply/{router}', [HotspotTemplateController::class, 'apply'])->name('hotspot-template.apply');
     Route::post('/hotspot-template/restore/{router}', [HotspotTemplateController::class, 'restore'])->name('hotspot-template.restore');
+
+    Route::get('/login-test', [LoginTestController::class, 'index'])->name('login-test');
 
     Route::view('/help', 'client.help.index')->name('help');
 

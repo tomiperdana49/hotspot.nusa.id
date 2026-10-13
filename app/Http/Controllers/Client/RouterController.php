@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Models\DeviceName;
+use App\Models\HotspotTemplate;
+use App\Models\Nas;
 use App\Models\Router;
 use App\Services\MikrotikConnector;
 use App\Services\RouterPairingService;
@@ -11,6 +14,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\IpUtils;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -119,6 +124,7 @@ class RouterController extends Controller
 
         return view('client.routers.show', [
             'router' => $router,
+            'blockedSites' => $router->blockedSites()->orderBy('domain')->get(),
             'mikrotikScript' => $router->api_host ? $this->pairing->mikrotikScript($router, $serverIp, $viaWireguard) : null,
         ]);
     }
@@ -139,6 +145,58 @@ class RouterController extends Controller
 
         return redirect()->route('client.routers.show', $router)
             ->with($result['ok'] ? 'status' : 'connect_error', $result['message']);
+    }
+
+    /**
+     * Remove a router from the panel. The router is cleaned up first
+     * (bypass bindings, queues, login template, RADIUS entry); if it
+     * can't be reached the removal stops there, unless the client ticks
+     * "force", since its bypassed devices would otherwise keep free
+     * access with nothing left here to expire them. A router that never
+     * got verified has no devices bound, so it goes either way.
+     */
+    public function destroy(Request $request, Router $router): RedirectResponse
+    {
+        $this->authorizeRouter($router);
+
+        $release = $this->connector->releaseRouter($router);
+
+        if (! $release['ok'] && $router->status === 'verified' && ! $request->boolean('force')) {
+            return redirect()->route('client.routers.show', $router)
+                ->with('connect_error', __('app.router_show.delete_unreachable', ['reason' => $release['message']]));
+        }
+
+        DB::transaction(function () use ($router) {
+            // FreeRADIUS reads `nas` on each request (dynamic clients), so
+            // dropping the row stops this router authenticating right away.
+            // An IP another of the client's routers still uses is kept.
+            $otherIps = Router::where('client_id', $router->client_id)
+                ->where('id', '!=', $router->id)
+                ->get(['nas_ip', 'api_host'])
+                ->flatMap(fn (Router $other) => [$other->nas_ip, $other->api_host])
+                ->filter();
+
+            $ips = collect([$router->nas_ip, $router->api_host])->filter()->unique()->diff($otherIps);
+
+            if ($ips->isNotEmpty()) {
+                Nas::where('client_id', $router->client_id)->whereIn('nasname', $ips)->delete();
+            }
+
+            DeviceName::where('router_id', $router->id)->delete();
+            $router->blockedSites()->delete();
+            // A "selected" profile left without routers logs in nowhere,
+            // never everywhere; see the profile_router migration.
+            DB::table('profile_router')->where('router_id', $router->id)->delete();
+            HotspotTemplate::ownFor($router)?->deleteWithFiles();
+            $router->delete();
+        });
+
+        foreach (['bound-macs', 'bypassed-hosts', 'device-names', 'storage'] as $key) {
+            Cache::forget("mikrotik:{$key}:{$router->id}");
+        }
+
+        return redirect()->route('client.routers.index')
+            ->with('status', __('app.router_show.deleted', ['name' => $router->name]));
     }
 
     private function validated(Request $request): array

@@ -26,7 +26,8 @@ class OnlineDevices
 
     /**
      * @param  Collection<string, HotspotUser>  $users  keyed by username
-     * @param  Collection<int, Router>  $routers  the client's routers
+     * @param  Collection<int, Router>  $routers  the client's routers (or the one being filtered on);
+     *                                            sessions on any other NAS are left out
      * @return Collection<int, array<string, mixed>>
      */
     public function forUsers(Collection $users, Collection $routers): Collection
@@ -39,6 +40,7 @@ class OnlineDevices
 
         $rows = DB::table('radacct')
             ->whereIn('username', $users->keys())
+            ->whereIn('nasipaddress', $routers->pluck('nas_ip')->filter())
             ->whereNull('acctstoptime')
             ->get();
 
@@ -55,6 +57,7 @@ class OnlineDevices
                 $user,
                 $row->username,
                 $radiusNames[$row->radacctid] ?? '-',
+                $router?->id,
                 $router?->name ?? $row->nasipaddress,
                 $row->framedipaddress ?: '-',
                 $row->callingstationid ?: '-',
@@ -88,6 +91,7 @@ class OnlineDevices
                     $user,
                     $host['username'],
                     $liveNames[$host['mac']] ?? $storedNames[$host['mac']] ?? '-',
+                    $router->id,
                     $router->name,
                     $host['ip'] ?: '-',
                     $host['mac'],
@@ -106,6 +110,7 @@ class OnlineDevices
         ?HotspotUser $user,
         string $username,
         string $deviceName,
+        ?int $routerId,
         string $routerName,
         string $ip,
         string $mac,
@@ -118,6 +123,7 @@ class OnlineDevices
             'hotspot_user_id' => $user?->id,
             'username' => $username,
             'device_name' => $deviceName,
+            'router_id' => $routerId,
             'router_name' => $routerName,
             'ip_address' => $ip,
             'mac_address' => $mac,

@@ -30,6 +30,7 @@
                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         <th class="px-5 py-3">{{ __('app.profile_index.col_name') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_speed') }}</th>
+                        <th class="px-5 py-3">{{ __('app.profile_index.col_routers') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_form.connection_mode_label') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_form.bandwidth_mode_label') }}</th>
                         <th class="px-5 py-3">{{ __('app.profile_index.col_duration') }}</th>
@@ -49,6 +50,19 @@
                                     <span title="{{ __('app.profile_form.rate_up_label') }}">↑ {{ $profile->rate_up ?: __('app.ui.unlimited') }}</span>
                                     <span title="{{ __('app.profile_form.rate_down_label') }}">↓ {{ $profile->rate_down ?: __('app.ui.unlimited') }}</span>
                                 </div>
+                            </td>
+                            <td class="px-5 py-3.5">
+                                @if ($profile->router_scope === 'all')
+                                    <span class="text-gray-500">{{ __('app.profile_index.all_routers') }}</span>
+                                @elseif ($profile->routers->isEmpty())
+                                    <span class="badge bg-red-50 text-red-700" title="{{ __('app.profile_index.no_routers_hint') }}">{{ __('app.profile_index.no_routers') }}</span>
+                                @else
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach ($profile->routers as $router)
+                                            <span class="badge bg-gray-100 text-gray-700">{{ $router->name }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </td>
                             <td class="px-5 py-3.5">
                                 @if ($profile->connection_mode === 'hotspot')

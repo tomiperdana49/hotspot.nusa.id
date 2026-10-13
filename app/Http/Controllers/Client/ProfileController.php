@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\Profile;
+use App\Models\Router;
 use App\Services\MikrotikConnector;
 use App\Services\ProfileRadiusSync;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 class ProfileController extends Controller
@@ -22,14 +24,14 @@ class ProfileController extends Controller
     public function index()
     {
         $clientId = Auth::guard('client')->user()->client_id;
-        $profiles = Profile::where('client_id', $clientId)->latest()->get();
+        $profiles = Profile::where('client_id', $clientId)->with('routers:id,name')->latest()->get();
 
         return view('client.profiles.index', compact('profiles'));
     }
 
     public function create()
     {
-        return view('client.profiles.create');
+        return view('client.profiles.create', ['routers' => $this->clientRouters()]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -41,7 +43,10 @@ class ProfileController extends Controller
         $data['group_name'] = $this->uniqueGroupName($client->code, $data['name']);
         $data['is_active'] = true;
 
+        $routerIds = $this->routerIds($request, $data['router_scope']);
+
         $profile = Profile::create($data);
+        $profile->routers()->sync($routerIds);
         $this->radiusSync->sync($profile);
         $this->connector->syncCookieLifetimeForClient($client);
 
@@ -52,7 +57,10 @@ class ProfileController extends Controller
     {
         $this->authorizeProfile($profile);
 
-        return view('client.profiles.edit', compact('profile'));
+        return view('client.profiles.edit', [
+            'profile' => $profile->load('routers:id'),
+            'routers' => $this->clientRouters(),
+        ]);
     }
 
     public function update(Request $request, Profile $profile): RedirectResponse
@@ -61,8 +69,10 @@ class ProfileController extends Controller
 
         $oldGroupName = $profile->group_name;
         $data = $this->validated($request, $profile->id);
+        $routerIds = $this->routerIds($request, $data['router_scope']);
 
         $profile->update($data);
+        $profile->routers()->sync($routerIds);
         $this->radiusSync->sync($profile, $oldGroupName);
         $this->connector->syncCookieLifetimeForClient($profile->client);
 
@@ -80,6 +90,7 @@ class ProfileController extends Controller
         $client = $profile->client;
 
         $this->radiusSync->removeGroup($profile->group_name);
+        $profile->routers()->detach();
         $profile->delete();
         $this->connector->syncCookieLifetimeForClient($client);
 
@@ -101,6 +112,7 @@ class ProfileController extends Controller
             'rate_up' => ['nullable', 'string', 'max:20'],
             'bandwidth_mode' => ['required', 'in:per_device,shared'],
             'connection_mode' => ['required', 'in:binding,hotspot'],
+            'router_scope' => ['required', 'in:all,selected'],
             'session_timeout' => ['nullable', 'integer', 'min:0'],
             'idle_timeout' => ['nullable', 'integer', 'min:0'],
             'validity_value' => ['nullable', 'integer', 'min:1'],
@@ -117,6 +129,31 @@ class ProfileController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * Routers ticked for a "selected" profile, limited to the client's own.
+     *
+     * @return array<int, int>
+     */
+    private function routerIds(Request $request, string $scope): array
+    {
+        if ($scope !== 'selected') {
+            return [];
+        }
+
+        $clientId = Auth::guard('client')->user()->client_id;
+        $request->validate([
+            'router_ids' => ['required', 'array', 'min:1'],
+            'router_ids.*' => ['integer', Rule::exists('routers', 'id')->where('client_id', $clientId)],
+        ], ['router_ids.required' => __('app.profile_form.router_ids_required')]);
+
+        return array_map('intval', $request->input('router_ids'));
+    }
+
+    private function clientRouters()
+    {
+        return Router::where('client_id', Auth::guard('client')->user()->client_id)->orderBy('name')->get(['id', 'name']);
     }
 
     private function uniqueGroupName(string $clientCode, string $profileName): string

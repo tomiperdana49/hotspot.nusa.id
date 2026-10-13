@@ -59,6 +59,57 @@
         @endforeach
     </div>
 
+    {{-- Per router --}}
+    @if ($routerCards->isNotEmpty())
+        <div class="flex items-end justify-between gap-3 mb-3">
+            <div>
+                <h2 class="font-semibold">{{ __('app.router_cards.title') }}</h2>
+                <p class="text-sm text-gray-500">{{ __('app.router_cards.subtitle') }}</p>
+            </div>
+            <a href="{{ route('client.routers.index') }}" class="text-sm font-medium text-brand-700 hover:underline">{{ __('app.router_cards.manage') }}</a>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+            @foreach ($routerCards as $card)
+                @php $r = $card['router']; @endphp
+                <div class="card p-5 flex flex-col gap-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <a href="{{ route('client.routers.show', $r) }}" class="font-semibold text-gray-900 hover:text-brand-700 truncate block">{{ $r->name }}</a>
+                            <div class="text-xs text-gray-400 font-mono">{{ $r->nas_ip ?? $r->api_host ?? '-' }}</div>
+                        </div>
+                        @if ($r->status !== 'verified')
+                            <span class="badge bg-amber-50 text-amber-700"><span class="dot bg-amber-500"></span>{{ __('app.ui.router_status.pending') }}</span>
+                        @elseif ($r->is_online)
+                            <span class="badge bg-green-50 text-green-700"><span class="dot bg-green-500"></span>Online</span>
+                        @else
+                            <span class="badge bg-red-50 text-red-700" title="{{ __('app.router_index.col_last_seen') }}: {{ $r->last_seen_at?->diffForHumans() ?? '-' }}"><span class="dot bg-red-500"></span>Offline</span>
+                        @endif
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <a href="{{ route('client.devices.index', ['router' => $r->id]) }}" class="rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5">
+                            <div class="text-xl font-bold tabular-nums">{{ $card['devices'] }}</div>
+                            <div class="text-xs text-gray-500">{{ __('app.router_cards.devices') }}</div>
+                        </a>
+                        <a href="{{ route('client.users.index', ['router' => $r->id]) }}" class="rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5">
+                            <div class="text-xl font-bold tabular-nums">{{ $card['vouchers'] }}</div>
+                            <div class="text-xs text-gray-500">{{ __('app.router_cards.vouchers') }}</div>
+                        </a>
+                        <a href="{{ route('client.profiles.index') }}" class="rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5">
+                            <div class="text-xl font-bold tabular-nums">{{ $card['own_profiles'] }}</div>
+                            <div class="text-xs text-gray-500">{{ __('app.router_cards.own_profiles') }}</div>
+                        </a>
+                    </div>
+                    <div class="text-xs text-gray-500 flex items-center justify-between gap-2">
+                        <span class="truncate">{{ __('app.router_cards.template') }}: <span class="font-medium text-gray-700">{{ $card['template'] ?? '-' }}</span></span>
+                        <a href="{{ route('client.hotspot-template.edit', $r->status === 'verified' ? ['router' => $r->id] : []) }}" class="shrink-0 text-brand-700 hover:underline">
+                            {{ $card['own_template'] ? __('app.router_cards.own_template') : __('app.router_cards.default_template') }}
+                        </a>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @endif
+
     {{-- Getting started --}}
     <div class="card mb-8">
         <div class="card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3">

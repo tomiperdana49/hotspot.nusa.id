@@ -135,7 +135,7 @@
 
 <section id="history" data-help-section class="card p-6 scroll-mt-6 space-y-3 text-sm text-gray-700">
     <h2 class="text-lg font-semibold text-gray-900">Riwayat Koneksi</h2>
-    <p>Semua sesi login pelanggan selama <b>90 hari terakhir</b>: waktu mulai &amp; selesai, durasi, upload/download, dan alasan putus. Data lebih lama dihapus otomatis.</p>
+    <p>Semua sesi login pelanggan selama <b>30 hari terakhir</b>: waktu mulai &amp; selesai, durasi, upload/download, dan alasan putus. Data lebih lama dihapus otomatis.</p>
     <ul class="list-disc pl-5 space-y-1">
         <li>Saring berdasarkan tanggal dan router, atau cari username, nama device, MAC, atau IP.</li>
         <li>Klik <b>Export CSV</b> untuk mengunduh data ke Excel.</li>

@@ -29,7 +29,7 @@
                 <label class="label">{{ __('app.user_index.col_profile') }}</label>
                 <select name="profile_id" class="select" required>
                     @foreach ($profiles as $profile)
-                        <option value="{{ $profile->id }}" @selected(old('profile_id', $user->profile_id) == $profile->id)>{{ $profile->name }}</option>
+                        <option value="{{ $profile->id }}" @selected(old('profile_id', $user->profile_id) == $profile->id)>{{ $profile->name }} · {{ $profile->router_label }}</option>
                     @endforeach
                 </select>
             </div>

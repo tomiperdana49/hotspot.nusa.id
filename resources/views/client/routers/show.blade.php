@@ -71,6 +71,42 @@
                         <div class="flex justify-between gap-4 py-2.5"><dt class="text-gray-500">{{ __('app.router_index.col_last_seen') }}</dt><dd>{{ $router->last_seen_at?->diffForHumans() ?? '-' }}</dd></div>
                     </dl>
                 </div>
+
+                <div class="card p-6" id="blocked-sites">
+                    <h2 class="font-semibold mb-1">{{ __('app.blocked_sites.title') }}</h2>
+                    <p class="text-sm text-gray-500 mb-4">{{ __('app.blocked_sites.hint') }}</p>
+
+                    @if ($blockedSites->isNotEmpty())
+                        <ul class="text-sm divide-y divide-gray-100 mb-4">
+                            @foreach ($blockedSites as $site)
+                                <li class="flex items-center justify-between gap-4 py-2">
+                                    <span class="font-mono break-all">{{ $site->domain }}</span>
+                                    <form method="POST" action="{{ route('client.routers.blocked-sites.destroy', [$router, $site]) }}"
+                                          onsubmit="return confirm(@js(__('app.blocked_sites.confirm_unblock', ['domain' => $site->domain])))">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn-sm-danger">{{ __('app.blocked_sites.unblock') }}</button>
+                                    </form>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p class="text-sm text-gray-400 mb-4">{{ __('app.blocked_sites.empty') }}</p>
+                    @endif
+
+                    <form method="POST" action="{{ route('client.routers.blocked-sites.store', $router) }}" class="space-y-3">
+                        @csrf
+                        <label class="label" for="blocked-domains">{{ __('app.blocked_sites.add_label') }}</label>
+                        <textarea id="blocked-domains" name="domains" rows="3" required class="input font-mono" placeholder="tiktok.com&#10;example.com">{{ old('domains') }}</textarea>
+                        <p class="text-xs text-gray-400">{{ __('app.blocked_sites.add_hint') }}</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="submit" class="btn-primary">{{ __('app.blocked_sites.add') }}</button>
+                            @if ($blockedSites->isNotEmpty())
+                                <button type="submit" formaction="{{ route('client.routers.blocked-sites.sync', $router) }}" formnovalidate class="btn-secondary">{{ __('app.blocked_sites.reapply') }}</button>
+                            @endif
+                        </div>
+                    </form>
+                    <p class="text-xs text-gray-400 mt-4">{{ __('app.blocked_sites.limits') }}</p>
+                </div>
             @endif
 
             @if ($mikrotikScript)
@@ -79,6 +115,25 @@
                     <pre class="mt-4 bg-gray-900 text-gray-100 text-xs p-4 rounded-xl overflow-x-auto leading-relaxed">{{ $mikrotikScript }}</pre>
                 </details>
             @endif
+
+            <div class="card p-6">
+                <h2 class="font-semibold mb-1">{{ __('app.router_show.delete_title') }}</h2>
+                <p class="text-sm text-gray-500 mb-4">{{ __('app.router_show.delete_hint') }}</p>
+                <form method="POST" action="{{ route('client.routers.destroy', $router) }}" class="space-y-4"
+                      onsubmit="return confirm(@js(__('app.router_show.confirm_delete', ['name' => $router->name])))">
+                    @csrf @method('DELETE')
+                    @if ($router->status === 'verified')
+                        <label class="flex items-start gap-2 text-sm text-gray-600">
+                            <input type="checkbox" name="force" value="1" class="mt-0.5">
+                            <span>{{ __('app.router_show.delete_force') }}</span>
+                        </label>
+                    @endif
+                    <button type="submit" class="btn-sm-danger">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18" stroke-linecap="round"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        {{ __('app.router_show.delete') }}
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 @endsection

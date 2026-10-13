@@ -135,7 +135,7 @@
 
 <section id="history" data-help-section class="card p-6 scroll-mt-6 space-y-3 text-sm text-gray-700">
     <h2 class="text-lg font-semibold text-gray-900">Connection History</h2>
-    <p>Every customer session from the <b>last 90 days</b>: start &amp; end, duration, upload/download and why it ended. Older data is deleted automatically.</p>
+    <p>Every customer session from the <b>last 30 days</b>: start &amp; end, duration, upload/download and why it ended. Older data is deleted automatically.</p>
     <ul class="list-disc pl-5 space-y-1">
         <li>Filter by date and router, or search by username, device name, MAC or IP.</li>
         <li>Click <b>Export CSV</b> to download the data for Excel.</li>
