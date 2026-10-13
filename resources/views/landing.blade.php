@@ -357,7 +357,7 @@
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h10M4 20h7" stroke-linecap="round"/></svg>
-          <h3>Riwayat koneksi 90 hari</h3>
+          <h3>Riwayat koneksi 30 hari</h3>
           <p>Telusuri siapa terhubung, kapan, dari perangkat apa, dan berapa datanya. Ekspor ke CSV untuk laporan.</p>
         </article>
         <article class="feature">

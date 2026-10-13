@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class PruneConnectionHistory extends Command
 {
-    protected $signature = 'history:prune {--days=90 : Keep this many days of connection history}';
+    protected $signature = 'history:prune {--days=30 : Keep this many days of connection history}';
 
     protected $description = 'Delete RADIUS accounting rows (connection history) and remembered device names older than the retention period.';
 

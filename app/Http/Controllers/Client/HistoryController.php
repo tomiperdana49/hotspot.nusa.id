@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class HistoryController extends Controller
 {
-    public const RETENTION_DAYS = 90;
+    public const RETENTION_DAYS = 30;
 
     private const PER_PAGE = 50;
 

@@ -385,7 +385,7 @@ return [
             'router' => 'MikroTik yang terhubung',
             'profile' => 'Kecepatan & masa aktif',
             'user' => 'Voucher / akun hotspot',
-            'history' => 'Log 90 hari terakhir',
+            'history' => 'Log 30 hari terakhir',
             'device' => 'Yang sedang terkoneksi',
             'hotspot_template' => 'Tampilan halaman login',
             'help' => 'Panduan penggunaan',

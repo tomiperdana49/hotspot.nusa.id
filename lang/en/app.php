@@ -385,7 +385,7 @@ return [
             'router' => 'Connected MikroTiks',
             'profile' => 'Speed & validity',
             'user' => 'Vouchers / hotspot accounts',
-            'history' => 'Last 90 days log',
+            'history' => 'Last 30 days log',
             'device' => 'Currently connected',
             'hotspot_template' => 'Hotspot login page design',
             'help' => 'How to use the system',
